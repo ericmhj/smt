@@ -24,7 +24,7 @@ export default function EditUserPage() {
     fetchUser();
   }, [params.id]);
 
-  const handleSubmit = async (data: Record<string, unknown>) => {
+  const handleSubmit = async (data: { email: string; fullName: string; password?: string; role: string; isActive: boolean }) => {
     await api(`/api/users/${params.id}`, {
       method: 'PUT',
       body: JSON.stringify(data),

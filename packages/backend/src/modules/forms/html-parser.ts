@@ -107,7 +107,7 @@ export class HTMLParser {
    */
   static sanitize(html: string): string {
     const window = new JSDOM('').window;
-    const purify = DOMPurify(window as unknown as Window);
+    const purify = DOMPurify(window as any);
 
     const clean = purify.sanitize(html, {
       ALLOWED_TAGS,

@@ -18,7 +18,7 @@ export const forms = pgTable('forms', {
   createdBy: uuid('created_by')
     .notNull()
     .references(() => users.id),
-  parentFormId: uuid('parent_form_id').references(() => forms.id),
+  parentFormId: uuid('parent_form_id'),
   currentVersion: integer('current_version').notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()

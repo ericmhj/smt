@@ -12,7 +12,6 @@ import type {
   KanbanColumn,
   KanbanCard,
   KanbanFilters,
-  COLUMN_LABELS,
 } from './kanban.types.js';
 import { COLUMN_LABELS as columnLabels } from './kanban.types.js';
 import type { ReactivoState, StateTransitionResponse } from '../reactivos/reactivo.types.js';

@@ -218,8 +218,8 @@ export class AuthService {
       return 7 * 24 * 60 * 60; // Default 7 days
     }
 
-    const value = parseInt(match[1], 10);
-    const unit = match[2];
+    const value = parseInt(match[1]!, 10);
+    const unit = match[2]!;
 
     switch (unit) {
       case 's': return value;

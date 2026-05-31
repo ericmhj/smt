@@ -49,7 +49,7 @@ async function authMiddlewarePlugin(
       });
     }
 
-    const token = parts[1];
+    const token = parts[1]!;
 
     try {
       const payload = await authService.verifyToken(token);

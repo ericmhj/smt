@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import UserForm from '@/components/users/UserForm';
 
 export default function NewUserPage() {
-  const handleSubmit = async (data: Record<string, unknown>) => {
+  const handleSubmit = async (data: { email: string; fullName: string; password?: string; role: string; isActive: boolean }) => {
     await api('/api/users', {
       method: 'POST',
       body: JSON.stringify(data),

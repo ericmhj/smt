@@ -1,75 +1,220 @@
 version: "3.9"
 
+# =============================================================================
+# SGR - Sistema de Gestión de Reactivos
+# Un solo comando: docker compose up --build
+# =============================================================================
+
 services:
+  # ---------------------------------------------------------------------------
+  # BACKEND (Fastify + TypeScript)
+  # Puerto: 3001
+  # Depende de: postgres, redis, minio, clamav
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+    container_name: sgr-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: "3001"
+      FRONTEND_URL: http://localhost:3000
+      DATABASE_URL: postgresql://sgr:sgr_dev_password@postgres:5432/sgr_dev
+      REDIS_URL: redis://:sgr_redis_dev@redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: sgr_minio_dev
+      MINIO_SECRET_KEY: sgr_minio_dev_password
+      MINIO_BUCKET: sgr-files
+      MINIO_USE_SSL: "false"
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+      CLAMAV_TIMEOUT: "30000"
+      JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
+      JWT_ACCESS_TOKEN_EXPIRY: 15m
+      JWT_REFRESH_TOKEN_EXPIRY: 7d
+      JWT_ISSUER: sgr-api
+      SIGNATURE_HMAC_SECRET: dev-hmac-secret-change-in-production
+      MAX_FILE_SIZE_MB: "10"
+      LOG_LEVEL: debug
+    volumes:
+      - jwt_keys:/app/keys
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      jwt-keygen:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3001/api/health').then(r => { if(!r.ok) process.exit(1) }).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - sgr-network
+
+  # ---------------------------------------------------------------------------
+  # FRONTEND (Next.js)
+  # Puerto: 3000
+  # Depende de: backend
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: packages/frontend/Dockerfile
+    container_name: sgr-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000').then(r => { if(!r.ok) process.exit(1) }).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - sgr-network
+
+  # ---------------------------------------------------------------------------
+  # INFRAESTRUCTURA
+  # ---------------------------------------------------------------------------
+
   postgres:
     image: postgres:16-alpine
     container_name: sgr-postgres
     restart: unless-stopped
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "5432:5432"
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-sgr}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sgr_dev_password}
-      POSTGRES_DB: ${POSTGRES_DB:-sgr_dev}
+      POSTGRES_USER: sgr
+      POSTGRES_PASSWORD: sgr_dev_password
+      POSTGRES_DB: sgr_dev
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sgr}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready -U sgr -d sgr_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - sgr-network
 
   redis:
     image: redis:7-alpine
     container_name: sgr-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
-    command: redis-server --requirepass ${REDIS_PASSWORD:-sgr_redis_dev}
+      - "6379:6379"
+    command: redis-server --requirepass sgr_redis_dev
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-sgr_redis_dev}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "redis-cli", "-a", "sgr_redis_dev", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - sgr-network
 
   minio:
     image: minio/minio:latest
     container_name: sgr-minio
     restart: unless-stopped
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "9000:9000"
+      - "9001:9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sgr_minio_dev}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-sgr_minio_dev_password}
+      MINIO_ROOT_USER: sgr_minio_dev
+      MINIO_ROOT_PASSWORD: sgr_minio_dev_password
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - sgr-network
 
   clamav:
-    image: clamav/clamav:1.3
+    image: clamav/clamav:stable
     container_name: sgr-clamav
     restart: unless-stopped
     ports:
-      - "${CLAMAV_PORT:-3310}:3310"
+      - "3310:3310"
     volumes:
       - clamav_data:/var/lib/clamav
     healthcheck:
       test: ["CMD", "clamdcheck"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 90s
+    networks:
+      - sgr-network
+
+  # ---------------------------------------------------------------------------
+  # UTILIDADES (se ejecutan una vez y terminan)
+  # ---------------------------------------------------------------------------
+
+  # Genera claves JWT automáticamente si no existen
+  jwt-keygen:
+    image: alpine:3.19
+    container_name: sgr-jwt-keygen
+    command: |
+      sh -c '
+        if [ ! -f /keys/private.pem ]; then
+          apk add --no-cache openssl
+          openssl genrsa -out /keys/private.pem 2048
+          openssl rsa -in /keys/private.pem -pubout -out /keys/public.pem
+          chmod 644 /keys/*.pem
+          echo "JWT keys generated."
+        else
+          echo "JWT keys already exist, skipping."
+        fi
+      '
+    volumes:
+      - jwt_keys:/keys
+    networks:
+      - sgr-network
+
+  # Crea el bucket de MinIO automáticamente
+  minio-setup:
+    image: minio/mc:latest
+    container_name: sgr-minio-setup
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: |
+      sh -c '
+        mc alias set sgr http://minio:9000 sgr_minio_dev sgr_minio_dev_password
+        mc mb sgr/sgr-files --ignore-existing
+        echo "MinIO bucket sgr-files ready."
+      '
+    networks:
+      - sgr-network
 
 volumes:
   postgres_data:
   redis_data:
   minio_data:
   clamav_data:
+  jwt_keys:
+
+networks:
+  sgr-network:
+    driver: bridge

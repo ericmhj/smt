@@ -103,7 +103,7 @@ export class UserService {
       .returning();
 
     const created = result[0];
-    return toUserResponse(created);
+    return toUserResponse(created!);
   }
 
   async update(id: string, data: UpdateUserDTO, actor: JWTPayload): Promise<UserResponse> {
@@ -187,7 +187,7 @@ export class UserService {
       .where(eq(users.id, id))
       .returning();
 
-    return toUserResponse(updated[0]);
+    return toUserResponse(updated[0]!);
   }
 
   async deactivate(id: string, actor: JWTPayload): Promise<void> {

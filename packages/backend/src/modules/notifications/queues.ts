@@ -18,7 +18,7 @@ const connection = getRedisConnection();
 
 // --- Queues ---
 
-export const pushQueue = new Queue<NotificationJobData>('notifications:push', {
+export const pushQueue = new Queue<NotificationJobData>('notifications-push', {
   connection,
   defaultJobOptions: {
     attempts: 3,
@@ -31,7 +31,7 @@ export const pushQueue = new Queue<NotificationJobData>('notifications:push', {
   },
 });
 
-export const emailQueue = new Queue<EmailJobData>('notifications:email', {
+export const emailQueue = new Queue<EmailJobData>('notifications-email', {
   connection,
   defaultJobOptions: {
     attempts: 3,
@@ -56,7 +56,7 @@ export function startPushWorker(): Worker<NotificationJobData> {
   if (pushWorker) return pushWorker;
 
   pushWorker = new Worker<NotificationJobData>(
-    'notifications:push',
+    'notifications-push',
     async (job: Job<NotificationJobData>) => {
       const { recipientId, type, data } = job.data;
 
@@ -93,7 +93,7 @@ export function startEmailWorker(): Worker<EmailJobData> {
   if (emailWorker) return emailWorker;
 
   emailWorker = new Worker<EmailJobData>(
-    'notifications:email',
+    'notifications-email',
     async (job: Job<EmailJobData>) => {
       const { recipientEmail, subject, body } = job.data;
 

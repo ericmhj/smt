@@ -38,7 +38,8 @@ export class FileValidation {
    * Default max: 10 MB (configurable via env MAX_FILE_SIZE_MB).
    */
   static validateSize(sizeBytes: number, maxSizeMB?: number): boolean {
-    const limit = maxSizeMB ?? Number(process.env.MAX_FILE_SIZE_MB) || 10;
+    const envLimit = Number(process.env.MAX_FILE_SIZE_MB);
+    const limit = maxSizeMB ?? (isNaN(envLimit) ? 10 : envLimit);
     const maxBytes = limit * 1024 * 1024;
     return sizeBytes <= maxBytes;
   }
@@ -124,7 +125,7 @@ export class FileValidation {
             resolve({ clean: true });
           } else {
             const match = response.match(/stream:\s*(.+)\s*FOUND/);
-            const threat = match ? match[1].trim() : 'Amenaza detectada';
+            const threat = match && match[1] ? match[1].trim() : 'Amenaza detectada';
             resolve({ clean: false, threat });
           }
         });
