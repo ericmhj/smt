@@ -1,0 +1,8 @@
+node_modules
+.next
+out
+coverage
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx

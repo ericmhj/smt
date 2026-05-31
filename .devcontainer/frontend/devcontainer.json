@@ -1,0 +1,49 @@
+{
+  "name": "SGR Frontend",
+  "dockerComposeFile": "docker-compose.devcontainer.yml",
+  "service": "frontend-dev",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20",
+      "pnpmVersion": "9.12.0"
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  "forwardPorts": [3000],
+
+  "portsAttributes": {
+    "3000": { "label": "Frontend (Next.js)", "onAutoForward": "openBrowser" }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "formulahendry.auto-rename-tag",
+        "dsznajder.es7-react-js-snippets"
+      ],
+      "settings": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "typescript.preferences.importModuleSpecifier": "relative",
+        "tailwindCSS.experimental.classRegex": [
+          ["clsx\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
+        ]
+      }
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/frontend/setup.sh",
+  "postStartCommand": "pnpm dev --filter @sgr/frontend",
+
+  "remoteEnv": {
+    "NODE_ENV": "development",
+    "NEXT_PUBLIC_API_URL": "http://localhost:3001"
+  }
+}

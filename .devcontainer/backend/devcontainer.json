@@ -1,0 +1,70 @@
+{
+  "name": "SGR Backend",
+  "dockerComposeFile": ["../../docker-compose.yml", "docker-compose.devcontainer.yml"],
+  "service": "backend-dev",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20",
+      "pnpmVersion": "9.12.0"
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  "forwardPorts": [3001, 5432, 6379, 9000, 9001, 3310],
+
+  "portsAttributes": {
+    "3001": { "label": "Backend API", "onAutoForward": "notify" },
+    "5432": { "label": "PostgreSQL", "onAutoForward": "silent" },
+    "6379": { "label": "Redis", "onAutoForward": "silent" },
+    "9000": { "label": "MinIO API", "onAutoForward": "silent" },
+    "9001": { "label": "MinIO Console", "onAutoForward": "notify" },
+    "3310": { "label": "ClamAV", "onAutoForward": "silent" }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "prisma.prisma",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "typescript.preferences.importModuleSpecifier": "relative"
+      }
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/backend/setup.sh",
+  "postStartCommand": "pnpm dev --filter @sgr/backend",
+
+  "remoteEnv": {
+    "NODE_ENV": "development",
+    "PORT": "3001",
+    "FRONTEND_URL": "http://localhost:3000",
+    "DATABASE_URL": "postgresql://sgr:sgr_dev_password@postgres:5432/sgr_dev",
+    "REDIS_URL": "redis://:sgr_redis_dev@redis:6379",
+    "MINIO_ENDPOINT": "http://minio:9000",
+    "MINIO_ACCESS_KEY": "sgr_minio_dev",
+    "MINIO_SECRET_KEY": "sgr_minio_dev_password",
+    "MINIO_BUCKET": "sgr-files",
+    "MINIO_USE_SSL": "false",
+    "CLAMAV_HOST": "clamav",
+    "CLAMAV_PORT": "3310",
+    "CLAMAV_TIMEOUT": "30000",
+    "JWT_PRIVATE_KEY_PATH": "/workspace/keys/private.pem",
+    "JWT_PUBLIC_KEY_PATH": "/workspace/keys/public.pem",
+    "JWT_ACCESS_TOKEN_EXPIRY": "15m",
+    "JWT_REFRESH_TOKEN_EXPIRY": "7d",
+    "JWT_ISSUER": "sgr-api",
+    "SIGNATURE_HMAC_SECRET": "dev-hmac-secret-change-in-production",
+    "MAX_FILE_SIZE_MB": "10",
+    "LOG_LEVEL": "debug"
+  }
+}

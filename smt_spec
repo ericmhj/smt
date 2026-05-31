@@ -1,0 +1,161 @@
+## Documento Final Consolidado: Requisitos Funcionales y No Funcionales
+
+### Sistema de Gestión de Reactivos
+
+---
+
+## 1. Roles del Sistema
+
+| Rol | Descripción |
+|-----|-------------|
+| **Superusuario** | Control total sobre perfiles, formularios, asignaciones y reactivos. |
+| **Administrador** | Gestiona perfiles (excepto superusuario), administra formularios, asigna formularios a técnicos. Puede ver Kanban pero no es su función principal. |
+| **Manager** | Accede al tablero Kanban, avanza estados de reactivos (solo hacia adelante) con firma digital, asigna formularios a técnicos, ve todos los formularios, envía observaciones con archivos adjuntos a técnicos. |
+| **Técnico de campo** | Llena únicamente los formularios asignados. Recibe notificaciones y observaciones del manager con adjuntos. Ve sus reactivos en PDF (solo lectura). Puede re-aplicar un formulario tras rechazo. |
+
+---
+
+## 2. Requisitos Funcionales (RF)
+
+### 2.1 Gestión de Perfiles
+
+| Código | Descripción |
+|--------|-------------|
+| RF-01 | El sistema debe permitir crear, editar, desactivar y eliminar usuarios con los roles definidos (superusuario, administrador, manager, técnico de campo). |
+| RF-02 | Cada perfil debe incluir: nombre, correo electrónico, rol, estado (activo/inactivo), fecha de registro. |
+| RF-03 | Solo el superusuario y el administrador pueden gestionar perfiles. |
+| RF-04 | El administrador puede crear y modificar usuarios con rol `manager` o `tecnico_campo`, pero no a otros administradores ni al superusuario. |
+
+### 2.2 Administración de Formularios (Plantillas)
+
+| Código | Descripción |
+|--------|-------------|
+| RF-05 | Existe una pantalla de administración de formularios accesible solo para superusuario y administrador. |
+| RF-06 | Permite crear, editar, eliminar y activar/desactivar plantillas de formularios. |
+| RF-07 | Cada formulario puede tener campos personalizados (texto, número, fecha, opciones múltiples, adjuntos, etc.). |
+| RF-08 | El superusuario tiene control total; el administrador no puede eliminar formularios creados por el superusuario. |
+
+### 2.3 Creación de Formularios desde HTML con Control de Versiones
+
+| Código | Descripción |
+|--------|-------------|
+| RF-32 | Página accesible solo para superusuario y administrador donde se introduce código HTML para definir la estructura del formulario. Se permite pegar HTML directamente o usar un editor básico. El HTML debe ser validado. |
+| RF-33 | Al editar un formulario existente, el sistema compara la estructura de campos (nombres, tipos, orden, cantidad) entre el HTML original y el nuevo: <br> - Si la estructura es idéntica (cambio solo estético: CSS, colores) se permite actualizar el mismo formulario. <br> - Si se detecta cambio estructural (agregar, eliminar o modificar campos) se muestra una advertencia y se solicita un nuevo nombre. No se permite guardar con el nombre original. |
+| RF-34 | Al confirmar el cambio estructural, se crea un nuevo formulario con el nuevo nombre y se genera automáticamente un nuevo esquema (tabla) en base de datos para almacenar las respuestas de ese formulario. El formulario original queda intacto. |
+| RF-35 | Se lleva un registro de versiones entre formularios que comparten un origen común. Se sugiere un nombre secuencial automático (ej: `_v2`), pero el administrador puede personalizarlo. |
+| RF-36 | El HTML se sanitiza para evitar XSS; solo se permiten etiquetas relacionadas con formularios y estilos. Todos los campos deben tener un atributo `name` único. |
+| RF-37 | Se registra en auditoría cada creación de nuevo formulario por cambio estructural (usuario, fecha, nombre original, nuevo nombre, motivo). |
+| RF-38 | En la lista de formularios de administración se muestra la versión y el historial de versiones con enlaces. |
+
+### 2.4 Asignación de Formularios a Técnicos de Campo
+
+| Código | Descripción |
+|--------|-------------|
+| RF-09 | Sección "Asignar formularios a técnicos" accesible para superusuario, administrador y **manager**. |
+| RF-10 | Permite seleccionar uno o varios técnicos de campo y uno o varios formularios activos, asignar y revocar. |
+| RF-11 | El manager puede ver **todos los formularios activos** y asignar cualquiera de ellos. |
+
+### 2.5 Aplicación de Reactivos por el Técnico de Campo
+
+| Código | Descripción |
+|--------|-------------|
+| RF-13 | El técnico de campo ve únicamente los formularios que le han sido asignados en una vista "Mis formularios". |
+| RF-14 | Llena y envía el formulario seleccionado. |
+| RF-15 | Al enviar, se genera un **reactivo** con: <br> - Estado inicial configurable (por defecto: `Pendiente`) <br> - `intento = 1` para el primer envío. <br> - Identificador único del formulario y del técnico. |
+| RF-16 | El técnico puede consultar sus reactivos generados **solo en formato PDF** (solo lectura, sin posibilidad de reenvío o edición). |
+| RF-29 | El PDF incluye: datos del formulario, respuestas, estado actual, historial de cambios con firmas digitales del manager, motivo de rechazo (si aplica) y número de intento. |
+
+### 2.6 Tablero Kanban para Manager
+
+| Código | Descripción |
+|--------|-------------|
+| RF-17 | El manager ve **todos los reactivos** (de todos los técnicos, todos los intentos). |
+| RF-17.1 | Solo puede mover las tarjetas **hacia adelante** en la secuencia: <br> - `Pendiente → En revisión` <br> - `En revisión → Validado` o `Rechazado` <br> - `Validado → Finalizado` <br> - `Rechazado` es terminal (no se puede mover de ahí). |
+| RF-17.2 | Cada cambio de estado exige **firma digital** del manager. |
+| RF-17.3 | Al cambiar a `Rechazado`, el manager debe ingresar un **motivo** obligatorio. |
+| RF-18 | Al hacer clic en una tarjeta se muestra el detalle completo (respuestas del formulario, técnico, historial de cambios con firmas, cadena de intentos). |
+| RF-19 | Solo el manager tiene acceso al tablero Kanban. |
+
+### 2.7 Re-aplicación del Formulario tras Rechazo
+
+| Código | Descripción |
+|--------|-------------|
+| RF-28 | Cuando un reactivo pasa a `Rechazado`, el técnico recibe una notificación con el motivo. |
+| RF-28.1 | El técnico puede **re-aplicar el mismo formulario** desde su vista "Mis formularios" (si el formulario sigue asignado). |
+| RF-28.2 | Al re-enviar, se genera un **nuevo reactivo** con: <br> - `reactivo_padre_id` (ID del reactivo original rechazado) <br> - `intento = intento_del_padre + 1` (ej: si el primero tenía intento 1, el segundo tendrá intento 2). |
+| RF-28.3 | El Kanban muestra en cada tarjeta el número de intento (ej: "Reactivo #3 – Intento 2"). |
+| RF-28.4 | El manager puede ver la cadena completa de intentos en el detalle del reactivo. |
+
+### 2.8 Notificaciones al Técnico de Campo
+
+| Código | Descripción |
+|--------|-------------|
+| RF-24 | Cada cambio de estado de un reactivo dispara una notificación al técnico que lo aplicó. |
+| RF-25 | La notificación incluye: reactivo, estado anterior y nuevo, responsable, fecha y motivo (si es rechazo). |
+| RF-26 | El técnico tiene un panel de notificaciones visible en su interfaz. |
+| RF-27 | Las notificaciones pueden ser push (en la aplicación) y/o por correo electrónico. |
+
+### 2.9 Firma Digital del Manager
+
+| Código | Descripción |
+|--------|-------------|
+| RF-30 | El manager debe contar con un método para firmar digitalmente: <br> - Opción A: Subir una imagen de su firma al perfil y confirmar cada cambio con contraseña o PIN. <br> - Opción B: Dibujar la firma en un área designada (compatible con mouse y táctil) en cada cambio de estado. |
+| RF-31 | La firma digital se almacena de forma segura (hash o imagen codificada) y queda asociada al registro de auditoría del cambio de estado. |
+
+### 2.10 Observaciones del Manager al Técnico de Campo
+
+| Código | Descripción |
+|--------|-------------|
+| RF-39 | Desde el detalle de un reactivo en el Kanban, el manager puede agregar una **observación** dirigida al técnico que aplicó el reactivo. |
+| RF-40 | La observación debe tener: <br> - Texto obligatorio. <br> - Opcionalmente, **uno o varios archivos adjuntos** (imágenes, PDF, documentos). <br> - Tamaño máximo por archivo: 10 MB (configurable). <br> - Formatos permitidos: jpg, png, pdf, doc, docx, xls, xlsx. |
+| RF-41 | Al guardar la observación: <br> - Se registra en el historial del reactivo (auditoría). <br> - Se envía una **notificación** al técnico (dentro del sistema y/o email). <br> - El técnico puede ver la observación y descargar los archivos adjuntos desde su panel de notificaciones o desde el PDF del reactivo. |
+| RF-42 | El técnico puede **marcar la observación como leída** (opcional para seguimiento). |
+| RF-43 | En el Kanban, el manager ve un indicador visual en la tarjeta si hay observaciones pendientes (no leídas por el técnico). |
+
+### 2.11 Autenticación y Control de Acceso
+
+| Código | Descripción |
+|--------|-------------|
+| RF-20 | Login con correo y contraseña, contraseñas hasheadas (bcrypt). |
+| RF-21 | Las rutas y componentes verifican el rol del usuario. |
+| RF-22 | Acceso denegado si no se tiene permiso (redirección a página de error o dashboard principal). |
+
+---
+
+## 3. Requisitos No Funcionales (RNF)
+
+| Código | Descripción | Prioridad |
+|--------|-------------|-----------|
+| RNF-01 | **Diseño responsive**: la interfaz debe adaptarse a dispositivos móviles, tablets y escritorio (usando CSS Grid/Flexbox). | Alta |
+| RNF-02 | **Rendimiento del Kanban**: el tablero debe cargar y renderizar hasta 100 tarjetas en menos de 2 segundos en condiciones normales. Las operaciones de arrastrar y soltar deben tener una latencia inferior a 200 ms. | Media |
+| RNF-03 | **Autenticación y sesión**: uso de tokens JWT con firma asimétrica (RS256) y expiración configurable. Los refresh tokens deben rotarse y tener una vida máxima de 7 días. | Alta |
+| RNF-04 | **Auditoría**: todas las operaciones de creación, modificación y eliminación de datos críticos (usuarios, formularios, reactivos, estados, observaciones) deben registrarse con: usuario, fecha, detalle de la operación y dirección IP. Los registros deben ser inmutables (append-only). | Alta |
+| RNF-05 | **Concurrencia**: el sistema debe soportar al menos 500 usuarios concurrentes (técnicos llenando formularios, managers viendo Kanban) sin degradación significativa del rendimiento. | Media |
+| RNF-06 | **Idioma y accesibilidad**: la interfaz debe estar en español, con colores que diferencien los estados del Kanban (verde para validado, rojo para rechazado, amarillo para pendiente, etc.). Debe cumplir con los criterios básicos de accesibilidad WCAG 2.1 AA (contraste, navegación por teclado). | Media |
+| RNF-07 | **Seguridad en transporte**: todas las comunicaciones entre cliente y servidor deben realizarse a través de HTTPS (TLS 1.2 o superior). HSTS debe estar habilitado. | Alta |
+| RNF-08 | **Arquitectura modular**: el código backend debe organizarse en módulos independientes (dominios) con dependencias bien definidas. Se debe usar un bus de eventos interno para la comunicación entre módulos. | Alta |
+| RNF-09 | **Integridad de la firma digital**: la firma digital debe almacenarse de forma que garantice su integridad criptográfica (usando funciones hash y cifrado simétrico o asimétrico). No debe ser posible modificar una firma ya registrada sin detectarlo. | Alta |
+| RNF-10 | **Compatibilidad táctil**: la interfaz de firma (dibujo) debe funcionar correctamente en dispositivos táctiles (tablets, smartphones) con evento `touch`. | Media |
+| RNF-11 | **Escaneo de archivos adjuntos**: todos los archivos subidos (en observaciones o en formularios) deben ser escaneados automáticamente con ClamAV antes de almacenarse. Los archivos con malware deben ser rechazados y registrados en auditoría. | Alta |
+| RNF-12 | **Ofuscación del frontend de administración**: el código JavaScript de las páginas de administración (creación de formularios, gestión de usuarios) debe ofuscarse con herramientas como Jscrambler para dificultar la ingeniería inversa. Las funciones críticas (validación de estructura HTML, comparación de versiones) deben compilarse a WebAssembly. | Alta |
+| RNF-13 | **Protección contra ataques comunes**: el backend debe incluir middleware de seguridad: <br> - Helmet (cabeceras HTTP seguras) <br> - Rate limiting (express-rate-limit) por IP y por usuario <br> - Validación de entrada con Zod (sanitización) <br> - Protección contra CSRF (doble cookie o token) <br> - Cabecera `Content-Security-Policy` adecuada. | Alta |
+| RNF-14 | **Cifrado de datos sensibles en reposo**: las columnas de la base de datos que contengan información sensible (firmas digitales, contraseñas, datos personales) deben estar cifradas usando `pgcrypto` u otra extensión de cifrado a nivel de base de datos. | Alta |
+| RNF-15 | **Monitoreo y alertas**: el sistema debe integrar herramientas de monitoreo (Sentry para errores, logs centralizados con Winston). Deben configurarse alertas ante eventos anómalos (múltiples cambios de estado en poco tiempo, intentos fallidos de autenticación). | Media |
+| RNF-16 | **Backup y recuperación**: se deben realizar backups automáticos diarios de la base de datos y del almacenamiento de archivos (MinIO). El tiempo máximo de recuperación ante un desastre debe ser inferior a 4 horas. | Alta |
+| RNF-17 | **Documentación de la API**: todos los endpoints REST deben estar documentados mediante OpenAPI (Swagger). La documentación debe generarse automáticamente a partir de los esquemas de validación (Zod). | Media |
+
+---
+
+## 4. Matriz de Cumplimiento (Resumen)
+
+| Requisito | Categoría | Prioridad |
+|-----------|-----------|-----------|
+| RF-01 a RF-04 | Perfiles | Alta |
+| RF-05 a RF-08 | Formularios (básico) | Alta |
+| RF-32 a RF-38 | Formularios (HTML + versiones) | Alta |
+| RF-09 a RF-11 | Asignación | Alta |
+| RF-13 a RF-16, RF-29 | Técnico campo | Alta |
+| RF-17 a RF-19 | Kanban manager | Alta |
+| RF-28 | Reintentos | Media |
+| RF-24 a RF-27 | Notificaciones | Alta |
+| RF-30, RF-31 | Firma

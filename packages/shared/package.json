@@ -1,0 +1,38 @@
+{
+  "name": "@sgr/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./*": {
+      "import": "./dist/*.js",
+      "types": "./dist/*.d.ts"
+    },
+    "./test-utils": {
+      "import": "./test-utils/index.ts",
+      "types": "./test-utils/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "fast-check": "^3.22.0"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^10.13.0",
+    "testcontainers": "^10.13.0",
+    "fastify": "^5.0.0",
+    "typescript": "^5.6.0"
+  }
+}

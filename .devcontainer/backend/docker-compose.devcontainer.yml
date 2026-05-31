@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  backend-dev:
+    image: mcr.microsoft.com/devcontainers/javascript-node:20
+    container_name: sgr-backend-dev
+    volumes:
+      - ../..:/workspace:cached
+    command: sleep infinity
+    networks:
+      - default
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # Override service names to use Docker internal DNS
+  postgres:
+    # Inherited from docker-compose.yml
+    networks:
+      - default
+
+  redis:
+    networks:
+      - default
+
+  minio:
+    networks:
+      - default
+
+  clamav:
+    networks:
+      - default
+
+networks:
+  default:
+    name: sgr-dev-network

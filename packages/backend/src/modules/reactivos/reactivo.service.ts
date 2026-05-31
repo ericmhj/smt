@@ -1,0 +1,467 @@
+import { eq, and, desc, sql, type SQL } from 'drizzle-orm';
+import type { Database } from '../../db/index.js';
+import { reactivos, stateTransitions } from '../../db/schema/reactivos.js';
+import { forms, formVersions, formAssignments } from '../../db/schema/forms.js';
+import { users } from '../../db/schema/users.js';
+import { ReactivoError, ReactivoErrorCode } from './reactivo.errors.js';
+import { validateResponses } from './schema-validator.js';
+import type {
+  ReactivoState,
+  ReactivoResponse,
+  ReactivoDetailResponse,
+  StateTransitionResponse,
+  ReactivoFilters,
+  PaginatedResult,
+} from './reactivo.types.js';
+import type { JWTPayload } from '../auth/auth.types.js';
+
+function toReactivoResponse(row: {
+  id: string;
+  formId: string;
+  formVersionId: string;
+  tecnicoId: string;
+  parentReactivoId: string | null;
+  attemptNumber: number;
+  state: string;
+  responses: unknown;
+  rejectionReason: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  formName?: string;
+}): ReactivoResponse {
+  return {
+    id: row.id,
+    formId: row.formId,
+    formVersionId: row.formVersionId,
+    tecnicoId: row.tecnicoId,
+    parentReactivoId: row.parentReactivoId,
+    attemptNumber: row.attemptNumber,
+    state: row.state as ReactivoState,
+    responses: row.responses as Record<string, unknown>,
+    rejectionReason: row.rejectionReason,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    formName: row.formName,
+  };
+}
+
+export class ReactivoService {
+  private db: Database;
+
+  constructor(db: Database) {
+    this.db = db;
+  }
+
+  /**
+   * Create a new reactivo (first attempt).
+   * Validates that the technician has the form assigned and responses match the schema.
+   */
+  async create(
+    formId: string,
+    responses: Record<string, unknown>,
+    actor: JWTPayload,
+  ): Promise<ReactivoResponse> {
+    // Validate technician has the form assigned (active assignment)
+    const assignmentResult = await this.db
+      .select()
+      .from(formAssignments)
+      .where(
+        and(
+          eq(formAssignments.formId, formId),
+          eq(formAssignments.tecnicoId, actor.sub),
+          eq(formAssignments.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (assignmentResult.length === 0) {
+      throw new ReactivoError(
+        403,
+        ReactivoErrorCode.FORM_NOT_ASSIGNED,
+        'No tienes este formulario asignado',
+      );
+    }
+
+    // Get current form and version
+    const formResult = await this.db
+      .select()
+      .from(forms)
+      .where(eq(forms.id, formId))
+      .limit(1);
+
+    const form = formResult[0];
+    if (!form) {
+      throw new ReactivoError(
+        404,
+        ReactivoErrorCode.FORM_NOT_FOUND,
+        'Formulario no encontrado',
+      );
+    }
+
+    // Get current form version with JSON schema
+    const versionResult = await this.db
+      .select()
+      .from(formVersions)
+      .where(
+        and(
+          eq(formVersions.formId, formId),
+          eq(formVersions.versionNumber, form.currentVersion),
+        ),
+      )
+      .limit(1);
+
+    const version = versionResult[0];
+    if (!version) {
+      throw new ReactivoError(
+        404,
+        ReactivoErrorCode.VERSION_NOT_FOUND,
+        'Versión del formulario no encontrada',
+      );
+    }
+
+    // Validate responses against JSON schema
+    const validation = validateResponses(responses, version.jsonSchema);
+    if (!validation.valid) {
+      throw new ReactivoError(
+        400,
+        ReactivoErrorCode.INVALID_RESPONSES,
+        `Respuestas inválidas: ${validation.errors.join(', ')}`,
+      );
+    }
+
+    // Create reactivo with state='pendiente', attempt_number=1
+    const result = await this.db
+      .insert(reactivos)
+      .values({
+        formId,
+        formVersionId: version.id,
+        tecnicoId: actor.sub,
+        attemptNumber: 1,
+        state: 'pendiente',
+        responses,
+      })
+      .returning();
+
+    const reactivo = result[0]!;
+
+    return toReactivoResponse(reactivo);
+  }
+
+  /**
+   * Re-apply after rejection. Creates a new reactivo linked to the parent.
+   */
+  async reapply(
+    parentReactivoId: string,
+    responses: Record<string, unknown>,
+    actor: JWTPayload,
+  ): Promise<ReactivoResponse> {
+    // Find parent reactivo
+    const parentResult = await this.db
+      .select()
+      .from(reactivos)
+      .where(eq(reactivos.id, parentReactivoId))
+      .limit(1);
+
+    const parent = parentResult[0];
+    if (!parent) {
+      throw new ReactivoError(
+        404,
+        ReactivoErrorCode.REACTIVO_NOT_FOUND,
+        'Reactivo padre no encontrado',
+      );
+    }
+
+    // Validate parent is in state 'rechazado'
+    if (parent.state !== 'rechazado') {
+      throw new ReactivoError(
+        400,
+        ReactivoErrorCode.PARENT_NOT_REJECTED,
+        'Solo se puede re-aplicar un reactivo rechazado',
+      );
+    }
+
+    // Validate actor is the same technician who created the parent
+    if (parent.tecnicoId !== actor.sub) {
+      throw new ReactivoError(
+        403,
+        ReactivoErrorCode.NOT_OWNER,
+        'Solo el técnico que creó el reactivo puede re-aplicar',
+      );
+    }
+
+    // Validate form is still assigned to technician
+    const assignmentResult = await this.db
+      .select()
+      .from(formAssignments)
+      .where(
+        and(
+          eq(formAssignments.formId, parent.formId),
+          eq(formAssignments.tecnicoId, actor.sub),
+          eq(formAssignments.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (assignmentResult.length === 0) {
+      throw new ReactivoError(
+        403,
+        ReactivoErrorCode.FORM_NOT_ASSIGNED,
+        'Ya no tienes este formulario asignado',
+      );
+    }
+
+    // Get form version schema and validate responses
+    const versionResult = await this.db
+      .select()
+      .from(formVersions)
+      .where(eq(formVersions.id, parent.formVersionId))
+      .limit(1);
+
+    const version = versionResult[0];
+    if (!version) {
+      throw new ReactivoError(
+        404,
+        ReactivoErrorCode.VERSION_NOT_FOUND,
+        'Versión del formulario no encontrada',
+      );
+    }
+
+    const validation = validateResponses(responses, version.jsonSchema);
+    if (!validation.valid) {
+      throw new ReactivoError(
+        400,
+        ReactivoErrorCode.INVALID_RESPONSES,
+        `Respuestas inválidas: ${validation.errors.join(', ')}`,
+      );
+    }
+
+    // Create new reactivo linked to parent
+    const result = await this.db
+      .insert(reactivos)
+      .values({
+        formId: parent.formId,
+        formVersionId: parent.formVersionId,
+        tecnicoId: actor.sub,
+        parentReactivoId,
+        attemptNumber: parent.attemptNumber + 1,
+        state: 'pendiente',
+        responses,
+      })
+      .returning();
+
+    const reactivo = result[0]!;
+
+    return toReactivoResponse(reactivo);
+  }
+
+  /**
+   * Get a reactivo by ID with full detail (form info, technician info, state transitions).
+   */
+  async getById(id: string): Promise<ReactivoDetailResponse> {
+    const result = await this.db
+      .select({
+        id: reactivos.id,
+        formId: reactivos.formId,
+        formVersionId: reactivos.formVersionId,
+        tecnicoId: reactivos.tecnicoId,
+        parentReactivoId: reactivos.parentReactivoId,
+        attemptNumber: reactivos.attemptNumber,
+        state: reactivos.state,
+        responses: reactivos.responses,
+        rejectionReason: reactivos.rejectionReason,
+        createdAt: reactivos.createdAt,
+        updatedAt: reactivos.updatedAt,
+        formName: forms.name,
+        formSlug: forms.slug,
+        tecnicoName: users.name,
+        tecnicoEmail: users.email,
+      })
+      .from(reactivos)
+      .innerJoin(forms, eq(reactivos.formId, forms.id))
+      .innerJoin(users, eq(reactivos.tecnicoId, users.id))
+      .where(eq(reactivos.id, id))
+      .limit(1);
+
+    const row = result[0];
+    if (!row) {
+      throw new ReactivoError(
+        404,
+        ReactivoErrorCode.REACTIVO_NOT_FOUND,
+        'Reactivo no encontrado',
+      );
+    }
+
+    // Get state transitions
+    const transitions = await this.db
+      .select()
+      .from(stateTransitions)
+      .where(eq(stateTransitions.reactivoId, id))
+      .orderBy(stateTransitions.createdAt);
+
+    const stateTransitionResponses: StateTransitionResponse[] = transitions.map((t) => ({
+      id: t.id,
+      reactivoId: t.reactivoId,
+      fromState: t.fromState as ReactivoState,
+      toState: t.toState as ReactivoState,
+      actorId: t.actorId,
+      signatureId: t.signatureId,
+      reason: t.reason,
+      createdAt: t.createdAt.toISOString(),
+    }));
+
+    return {
+      id: row.id,
+      formId: row.formId,
+      formVersionId: row.formVersionId,
+      tecnicoId: row.tecnicoId,
+      parentReactivoId: row.parentReactivoId,
+      attemptNumber: row.attemptNumber,
+      state: row.state as ReactivoState,
+      responses: row.responses as Record<string, unknown>,
+      rejectionReason: row.rejectionReason,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      form: {
+        id: row.formId,
+        name: row.formName,
+        slug: row.formSlug,
+      },
+      tecnico: {
+        id: row.tecnicoId,
+        name: row.tecnicoName,
+        email: row.tecnicoEmail,
+      },
+      stateTransitions: stateTransitionResponses,
+    };
+  }
+
+  /**
+   * Get paginated list of reactivos for a technician.
+   */
+  async getByTecnico(
+    tecnicoId: string,
+    filters: ReactivoFilters,
+  ): Promise<PaginatedResult<ReactivoResponse>> {
+    const page = filters.page ?? 1;
+    const pageSize = filters.pageSize ?? 20;
+    const offset = (page - 1) * pageSize;
+
+    const conditions: SQL[] = [eq(reactivos.tecnicoId, tecnicoId)];
+
+    if (filters.state) {
+      conditions.push(eq(reactivos.state, filters.state));
+    }
+
+    const whereClause = and(...conditions);
+
+    // Get total count
+    const countResult = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reactivos)
+      .where(whereClause);
+
+    const total = countResult[0]?.count ?? 0;
+
+    // Get paginated results with form name
+    const results = await this.db
+      .select({
+        id: reactivos.id,
+        formId: reactivos.formId,
+        formVersionId: reactivos.formVersionId,
+        tecnicoId: reactivos.tecnicoId,
+        parentReactivoId: reactivos.parentReactivoId,
+        attemptNumber: reactivos.attemptNumber,
+        state: reactivos.state,
+        responses: reactivos.responses,
+        rejectionReason: reactivos.rejectionReason,
+        createdAt: reactivos.createdAt,
+        updatedAt: reactivos.updatedAt,
+        formName: forms.name,
+      })
+      .from(reactivos)
+      .innerJoin(forms, eq(reactivos.formId, forms.id))
+      .where(whereClause)
+      .limit(pageSize)
+      .offset(offset)
+      .orderBy(desc(reactivos.createdAt));
+
+    return {
+      data: results.map((row) => toReactivoResponse(row)),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  /**
+   * Get the full attempt chain for a reactivo.
+   * Walks up the parent chain to find the root, then returns all reactivos ordered by attempt_number.
+   */
+  async getAttemptChain(reactivoId: string): Promise<ReactivoResponse[]> {
+    // First, find the reactivo
+    const reactivoResult = await this.db
+      .select()
+      .from(reactivos)
+      .where(eq(reactivos.id, reactivoId))
+      .limit(1);
+
+    const reactivo = reactivoResult[0];
+    if (!reactivo) {
+      throw new ReactivoError(
+        404,
+        ReactivoErrorCode.REACTIVO_NOT_FOUND,
+        'Reactivo no encontrado',
+      );
+    }
+
+    // Walk up the parent chain to find the root
+    let rootId = reactivo.id;
+    let currentParentId = reactivo.parentReactivoId;
+
+    while (currentParentId) {
+      rootId = currentParentId;
+      const parentResult = await this.db
+        .select({ id: reactivos.id, parentReactivoId: reactivos.parentReactivoId })
+        .from(reactivos)
+        .where(eq(reactivos.id, currentParentId))
+        .limit(1);
+
+      const parent = parentResult[0];
+      if (!parent) break;
+      currentParentId = parent.parentReactivoId;
+    }
+
+    // Now get all reactivos in the chain starting from root
+    // We collect them by walking down from root
+    const chain: ReactivoResponse[] = [];
+    let currentId: string | null = rootId;
+
+    while (currentId) {
+      const result = await this.db
+        .select()
+        .from(reactivos)
+        .where(eq(reactivos.id, currentId))
+        .limit(1);
+
+      const current = result[0];
+      if (!current) break;
+
+      chain.push(toReactivoResponse(current));
+
+      // Find child (reactivo that has this one as parent)
+      const childResult = await this.db
+        .select({ id: reactivos.id })
+        .from(reactivos)
+        .where(eq(reactivos.parentReactivoId, currentId))
+        .limit(1);
+
+      currentId = childResult[0]?.id ?? null;
+    }
+
+    // Sort by attempt_number
+    chain.sort((a, b) => a.attemptNumber - b.attemptNumber);
+
+    return chain;
+  }
+}

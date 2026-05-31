@@ -1,0 +1,38 @@
+'use client';
+
+import Link from 'next/link';
+
+export interface KanbanCardData {
+  id: string;
+  technicianName: string;
+  formName: string;
+  attempt: number;
+  hasUnreadObservations: boolean;
+  createdAt: string;
+}
+
+interface KanbanCardProps {
+  card: KanbanCardData;
+}
+
+export default function KanbanCard({ card }: KanbanCardProps) {
+  return (
+    <Link href={`/kanban/${card.id}`}>
+      <div className="bg-white rounded-md shadow-sm border border-gray-200 p-3 hover:shadow-md transition-shadow cursor-pointer">
+        <div className="flex items-start justify-between">
+          <p className="text-sm font-medium text-gray-800 truncate">{card.formName}</p>
+          {card.hasUnreadObservations && (
+            <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 mt-1" />
+          )}
+        </div>
+        <p className="text-xs text-gray-500 mt-1">{card.technicianName}</p>
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-xs text-gray-400">Intento #{card.attempt}</span>
+          <span className="text-xs text-gray-400">
+            {new Date(card.createdAt).toLocaleDateString('es')}
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
