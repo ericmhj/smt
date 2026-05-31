@@ -42,6 +42,25 @@ export interface AssignmentWithTecnicoResponse {
   };
 }
 
+export interface AssignmentWithFormAndTecnicoResponse {
+  id: string;
+  formId: string;
+  tecnicoId: string;
+  assignedBy: string;
+  isActive: boolean;
+  createdAt: string;
+  revokedAt: string | null;
+  form: {
+    name: string;
+    slug: string;
+    currentVersion: number;
+  };
+  tecnico: {
+    name: string;
+    email: string;
+  };
+}
+
 export interface MyFormResponse {
   id: string;
   formId: string;

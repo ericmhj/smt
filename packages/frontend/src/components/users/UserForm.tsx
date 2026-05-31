@@ -95,6 +95,7 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="tecnico">Técnico de Campo</option>
+          <option value="tecnico_de_campo">Técnico de Campo</option>
           <option value="manager">Manager</option>
           <option value="admin">Administrador</option>
           <option value="superusuario">Superusuario</option>

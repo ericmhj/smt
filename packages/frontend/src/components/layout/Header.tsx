@@ -11,6 +11,7 @@ const roleLabels: Record<string, string> = {
   admin: 'Administrador',
   manager: 'Manager',
   tecnico: 'Técnico de Campo',
+  tecnico_de_campo: 'Técnico de Campo',
 };
 
 export default function Header() {

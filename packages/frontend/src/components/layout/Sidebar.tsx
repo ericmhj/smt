@@ -15,8 +15,8 @@ const navItems: NavItem[] = [
   { label: 'Usuarios', href: '/users', roles: ['superusuario', 'admin'] },
   { label: 'Formularios', href: '/forms', roles: ['superusuario', 'admin', 'manager'] },
   { label: 'Asignaciones', href: '/assignments', roles: ['superusuario', 'admin', 'manager'] },
-  { label: 'Mis Formularios', href: '/my-forms', roles: ['tecnico'] },
-  { label: 'Mis Reactivos', href: '/my-reactivos', roles: ['tecnico'] },
+  { label: 'Mis Formularios', href: '/my-forms', roles: ['tecnico', 'tecnico_de_campo'] },
+  { label: 'Mis Reactivos', href: '/my-reactivos', roles: ['tecnico', 'tecnico_de_campo'] },
 ];
 
 export default function Sidebar() {

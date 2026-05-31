@@ -21,8 +21,9 @@ function LoginForm() {
     try {
       await login(email, password);
       // Redirect based on role
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
       document.cookie = `access_token=${localStorage.getItem('access_token')}; path=/`;
-      router.push('/kanban');
+      router.push(getDefaultRoute(storedUser.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
     } finally {

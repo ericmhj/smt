@@ -5,6 +5,7 @@ export const roleEnum = pgEnum('role', [
   'admin',
   'manager',
   'tecnico',
+  'tecnico_de_campo',
 ]);
 
 export const reactivoStateEnum = pgEnum('reactivo_state', [

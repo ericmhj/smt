@@ -22,10 +22,11 @@ import type { JWTPayload } from '../auth/auth.types.js';
  * - manager and tecnico cannot manage any users
  */
 const ROLE_HIERARCHY: Record<Role, Role[]> = {
-  superusuario: ['admin', 'manager', 'tecnico'],
-  admin: ['manager', 'tecnico'],
+  superusuario: ['admin', 'manager', 'tecnico', 'tecnico_de_campo'],
+  admin: ['manager', 'tecnico', 'tecnico_de_campo'],
   manager: [],
   tecnico: [],
+  tecnico_de_campo: [],
 };
 
 function canManageRole(actorRole: Role, targetRole: Role): boolean {
@@ -310,7 +311,13 @@ export class UserService {
     const conditions: SQL[] = [];
 
     if (filters.role) {
-      conditions.push(eq(users.role, filters.role));
+      if (filters.role === 'tecnico') {
+        conditions.push(
+          or(eq(users.role, 'tecnico'), eq(users.role, 'tecnico_de_campo'))!,
+        );
+      } else {
+        conditions.push(eq(users.role, filters.role));
+      }
     }
 
     if (filters.isActive !== undefined) {

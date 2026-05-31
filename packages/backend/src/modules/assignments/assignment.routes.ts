@@ -12,7 +12,7 @@ export async function assignmentRoutes(
   const assignmentService = new AssignmentService(opts.db);
 
   const managerRoles = requireRole(['superusuario', 'admin', 'manager']);
-  const tecnicoRole = requireRole(['tecnico']);
+  const tecnicoRole = requireRole(['tecnico', 'tecnico_de_campo']);
 
   // POST /api/assignments — assign form to technician
   fastify.post(
@@ -39,6 +39,29 @@ export async function assignmentRoutes(
           request.user,
         );
         return reply.status(201).send(assignment);
+      } catch (error) {
+        if (error instanceof AssignmentError) {
+          return reply.status(error.statusCode).send({
+            statusCode: error.statusCode,
+            code: error.code,
+            message: error.message,
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // GET /api/assignments — list active assignments
+  fastify.get(
+    '/api/assignments',
+    { preHandler: [managerRoles] },
+    async (request, reply) => {
+      try {
+        const assignments = await assignmentService.getAllActive();
+        return reply.status(200).send({ data: assignments });
       } catch (error) {
         if (error instanceof AssignmentError) {
           return reply.status(error.statusCode).send({

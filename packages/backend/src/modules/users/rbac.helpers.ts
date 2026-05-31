@@ -7,10 +7,11 @@ import type { Role } from './user.types.js';
  * - manager and tecnico cannot manage any users
  */
 export const ROLE_HIERARCHY: Record<Role, Role[]> = {
-  superusuario: ['admin', 'manager', 'tecnico'],
-  admin: ['manager', 'tecnico'],
+  superusuario: ['admin', 'manager', 'tecnico', 'tecnico_de_campo'],
+  admin: ['manager', 'tecnico', 'tecnico_de_campo'],
   manager: [],
   tecnico: [],
+  tecnico_de_campo: [],
 };
 
 /**

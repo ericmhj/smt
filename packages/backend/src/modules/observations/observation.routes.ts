@@ -30,8 +30,8 @@ export async function observationRoutes(
   const observationService = new ObservationService(opts.db);
 
   const managerRoles = requireRole(['superusuario', 'admin', 'manager']);
-  const tecnicoRole = requireRole(['tecnico']);
-  const allAuthenticated = requireRole(['superusuario', 'admin', 'manager', 'tecnico']);
+  const tecnicoRole = requireRole(['tecnico', 'tecnico_de_campo']);
+  const allAuthenticated = requireRole(['superusuario', 'admin', 'manager', 'tecnico', 'tecnico_de_campo']);
 
   // POST /api/reactivos/:id/observations — create observation with attachments
   fastify.post(

@@ -21,8 +21,27 @@ export default function AssignmentsPage() {
   const fetchAssignments = async () => {
     setLoading(true);
     try {
-      const data = await api<{ data: Assignment[] }>('/api/assignments');
-      setAssignments(data.data || []);
+      const response = await api<{
+        data: Array<{
+          id: string;
+          tecnicoId: string;
+          formId: string;
+          createdAt: string;
+          tecnico: { name: string };
+          form: { name: string };
+        }>;
+      }>('/api/assignments');
+
+      setAssignments(
+        (response.data || []).map((assignment) => ({
+          id: assignment.id,
+          userId: assignment.tecnicoId,
+          userName: assignment.tecnico.name,
+          formId: assignment.formId,
+          formName: assignment.form.name,
+          assignedAt: assignment.createdAt,
+        }))
+      );
     } catch {
       setAssignments([]);
     } finally {

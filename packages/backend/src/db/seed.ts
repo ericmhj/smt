@@ -65,7 +65,7 @@ async function seed() {
       email: 'tecnico@sgr.local',
       passwordHash: tecnicoPassword,
       name: 'Técnico de Prueba',
-      role: 'tecnico',
+      role: 'tecnico_de_campo',
     })
     .onConflictDoNothing({ target: schema.users.email })
     .returning();

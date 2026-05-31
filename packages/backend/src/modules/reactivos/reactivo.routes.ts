@@ -18,8 +18,8 @@ export async function reactivoRoutes(
   const reactivoService = new ReactivoService(opts.db);
   const pdfService = new PDFService(opts.db);
 
-  const tecnicoRole = requireRole(['tecnico']);
-  const allAuthenticated = requireRole(['superusuario', 'admin', 'manager', 'tecnico']);
+  const tecnicoRole = requireRole(['tecnico', 'tecnico_de_campo']);
+  const allAuthenticated = requireRole(['superusuario', 'admin', 'manager', 'tecnico', 'tecnico_de_campo']);
 
   // POST /api/reactivos — create reactivo (requireRole: tecnico)
   fastify.post(

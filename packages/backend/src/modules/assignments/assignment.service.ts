@@ -63,7 +63,7 @@ export class AssignmentService {
       );
     }
 
-    if (tecnico.role !== 'tecnico') {
+    if (tecnico.role !== 'tecnico' && tecnico.role !== 'tecnico_de_campo') {
       throw new AssignmentError(
         400,
         AssignmentErrorCode.TECNICO_INVALID_ROLE,
@@ -177,6 +177,47 @@ export class AssignmentService {
         name: row.formName,
         slug: row.formSlug,
         currentVersion: row.formCurrentVersion,
+      },
+    }));
+  }
+
+  async getAllActive(): Promise<AssignmentWithFormAndTecnicoResponse[]> {
+    const results = await this.db
+      .select({
+        id: formAssignments.id,
+        formId: formAssignments.formId,
+        tecnicoId: formAssignments.tecnicoId,
+        assignedBy: formAssignments.assignedBy,
+        isActive: formAssignments.isActive,
+        createdAt: formAssignments.createdAt,
+        revokedAt: formAssignments.revokedAt,
+        formName: forms.name,
+        formSlug: forms.slug,
+        formCurrentVersion: forms.currentVersion,
+        tecnicoName: users.name,
+        tecnicoEmail: users.email,
+      })
+      .from(formAssignments)
+      .innerJoin(forms, eq(formAssignments.formId, forms.id))
+      .innerJoin(users, eq(formAssignments.tecnicoId, users.id))
+      .where(eq(formAssignments.isActive, true));
+
+    return results.map((row) => ({
+      id: row.id,
+      formId: row.formId,
+      tecnicoId: row.tecnicoId,
+      assignedBy: row.assignedBy,
+      isActive: row.isActive,
+      createdAt: row.createdAt.toISOString(),
+      revokedAt: row.revokedAt?.toISOString() ?? null,
+      form: {
+        name: row.formName,
+        slug: row.formSlug,
+        currentVersion: row.formCurrentVersion,
+      },
+      tecnico: {
+        name: row.tecnicoName,
+        email: row.tecnicoEmail,
       },
     }));
   }
