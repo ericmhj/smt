@@ -34,6 +34,7 @@ async function seed() {
       name: 'Super Administrador',
       role: 'superusuario',
     })
+    .onConflictDoNothing({ target: schema.users.email })
     .returning();
 
   const [admin] = await db
@@ -44,6 +45,7 @@ async function seed() {
       name: 'Administrador de Prueba',
       role: 'admin',
     })
+    .onConflictDoNothing({ target: schema.users.email })
     .returning();
 
   const [manager] = await db
@@ -54,6 +56,7 @@ async function seed() {
       name: 'Manager de Prueba',
       role: 'manager',
     })
+    .onConflictDoNothing({ target: schema.users.email })
     .returning();
 
   const [tecnico] = await db
@@ -64,9 +67,18 @@ async function seed() {
       name: 'Técnico de Prueba',
       role: 'tecnico',
     })
+    .onConflictDoNothing({ target: schema.users.email })
     .returning();
 
-  console.log('✅ Users created');
+  // If users already exist, fetch them
+  const { eq } = await import('drizzle-orm');
+  const allUsers = await db.select().from(schema.users);
+  const su = superusuario || allUsers.find(u => u.email === 'admin@sgr.local')!;
+  const ad = admin || allUsers.find(u => u.email === 'administrador@sgr.local')!;
+  const mg = manager || allUsers.find(u => u.email === 'manager@sgr.local')!;
+  const tc = tecnico || allUsers.find(u => u.email === 'tecnico@sgr.local')!;
+
+  console.log('✅ Users created/verified');
 
   // --- Forms ---
   const [form1] = await db
@@ -75,9 +87,10 @@ async function seed() {
       name: 'Inspección de Equipos',
       slug: 'inspeccion-equipos',
       isActive: true,
-      createdBy: superusuario.id,
+      createdBy: su.id,
       currentVersion: 1,
     })
+    .onConflictDoNothing({ target: schema.forms.slug })
     .returning();
 
   const [form2] = await db
@@ -86,15 +99,23 @@ async function seed() {
       name: 'Reporte de Mantenimiento',
       slug: 'reporte-mantenimiento',
       isActive: true,
-      createdBy: admin.id,
+      createdBy: ad.id,
       currentVersion: 1,
     })
+    .onConflictDoNothing({ target: schema.forms.slug })
     .returning();
 
-  console.log('✅ Forms created');
+  // Fetch forms (may already exist)
+  const allForms = await db.select().from(schema.forms);
+  const f1 = form1 || allForms.find(f => f.slug === 'inspeccion-equipos');
+  const f2 = form2 || allForms.find(f => f.slug === 'reporte-mantenimiento');
 
-  // --- Form Versions ---
-  const sampleHtml1 = `
+  if (f1 && f2) {
+    console.log('✅ Forms created/verified');
+
+    // --- Form Versions (only if forms were just created) ---
+    if (form1 || form2) {
+      const sampleHtml1 = `
     <form>
       <label for="equipo">Equipo</label>
       <input type="text" name="equipo" required />
@@ -109,7 +130,7 @@ async function seed() {
     </form>
   `.trim();
 
-  const sampleHtml2 = `
+      const sampleHtml2 = `
     <form>
       <label for="tipo_mantenimiento">Tipo de Mantenimiento</label>
       <select name="tipo_mantenimiento">
@@ -123,79 +144,77 @@ async function seed() {
     </form>
   `.trim();
 
-  await db.insert(schema.formVersions).values([
-    {
-      formId: form1.id,
-      versionNumber: 1,
-      htmlContent: sampleHtml1,
-      sanitizedHtml: sampleHtml1,
-      jsonSchema: {
-        type: 'object',
-        properties: {
-          equipo: { type: 'string' },
-          estado: { type: 'string', enum: ['bueno', 'regular', 'malo'] },
-          observaciones: { type: 'string' },
-        },
-        required: ['equipo'],
-      },
-      fieldsMetadata: {
-        fields: [
-          { name: 'equipo', type: 'text', required: true },
-          { name: 'estado', type: 'select', required: false },
-          { name: 'observaciones', type: 'textarea', required: false },
-        ],
-      },
-      changeType: 'initial',
-      createdBy: superusuario.id,
-    },
-    {
-      formId: form2.id,
-      versionNumber: 1,
-      htmlContent: sampleHtml2,
-      sanitizedHtml: sampleHtml2,
-      jsonSchema: {
-        type: 'object',
-        properties: {
-          tipo_mantenimiento: {
-            type: 'string',
-            enum: ['preventivo', 'correctivo'],
+      if (form1) {
+        await db.insert(schema.formVersions).values({
+          formId: f1.id,
+          versionNumber: 1,
+          htmlContent: sampleHtml1,
+          sanitizedHtml: sampleHtml1,
+          jsonSchema: {
+            type: 'object',
+            properties: {
+              equipo: { type: 'string' },
+              estado: { type: 'string', enum: ['bueno', 'regular', 'malo'] },
+              observaciones: { type: 'string' },
+            },
+            required: ['equipo'],
           },
-          descripcion: { type: 'string' },
-          fecha_realizacion: { type: 'string', format: 'date' },
-        },
-        required: ['descripcion', 'fecha_realizacion'],
+          fieldsMetadata: [
+            { name: 'equipo', type: 'text', required: true },
+            { name: 'estado', type: 'select', required: false },
+            { name: 'observaciones', type: 'textarea', required: false },
+          ],
+          changeType: 'initial',
+          createdBy: su.id,
+        }).onConflictDoNothing();
+      }
+
+      if (form2) {
+        await db.insert(schema.formVersions).values({
+          formId: f2.id,
+          versionNumber: 1,
+          htmlContent: sampleHtml2,
+          sanitizedHtml: sampleHtml2,
+          jsonSchema: {
+            type: 'object',
+            properties: {
+              tipo_mantenimiento: { type: 'string', enum: ['preventivo', 'correctivo'] },
+              descripcion: { type: 'string' },
+              fecha_realizacion: { type: 'string', format: 'date' },
+            },
+            required: ['descripcion', 'fecha_realizacion'],
+          },
+          fieldsMetadata: [
+            { name: 'tipo_mantenimiento', type: 'select', required: false },
+            { name: 'descripcion', type: 'textarea', required: true },
+            { name: 'fecha_realizacion', type: 'date', required: true },
+          ],
+          changeType: 'initial',
+          createdBy: ad.id,
+        }).onConflictDoNothing();
+      }
+
+      console.log('✅ Form versions created');
+    }
+
+    // --- Form Assignments ---
+    await db.insert(schema.formAssignments).values([
+      {
+        formId: f1.id,
+        tecnicoId: tc.id,
+        assignedBy: mg.id,
+        isActive: true,
       },
-      fieldsMetadata: {
-        fields: [
-          { name: 'tipo_mantenimiento', type: 'select', required: false },
-          { name: 'descripcion', type: 'textarea', required: true },
-          { name: 'fecha_realizacion', type: 'date', required: true },
-        ],
+      {
+        formId: f2.id,
+        tecnicoId: tc.id,
+        assignedBy: ad.id,
+        isActive: true,
       },
-      changeType: 'initial',
-      createdBy: admin.id,
-    },
-  ]);
+    ]).onConflictDoNothing();
 
-  console.log('✅ Form versions created');
-
-  // --- Form Assignments ---
-  await db.insert(schema.formAssignments).values([
-    {
-      formId: form1.id,
-      tecnicoId: tecnico.id,
-      assignedBy: manager.id,
-      isActive: true,
-    },
-    {
-      formId: form2.id,
-      tecnicoId: tecnico.id,
-      assignedBy: admin.id,
-      isActive: true,
-    },
-  ]);
-
-  console.log('✅ Form assignments created');
+    console.log('✅ Form assignments created/verified');
+  }
 
   console.log('🎉 Seed completed successfully!');
   console.log('');

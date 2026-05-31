@@ -20,10 +20,9 @@ function LoginForm() {
 
     try {
       await login(email, password);
-      // Set cookie for middleware
+      // Redirect based on role
       document.cookie = `access_token=${localStorage.getItem('access_token')}; path=/`;
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      router.push(getDefaultRoute(user.role));
+      router.push('/kanban');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
     } finally {

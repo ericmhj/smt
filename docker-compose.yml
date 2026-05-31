@@ -104,6 +104,7 @@ services:
       POSTGRES_DB: sgr_dev
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./packages/backend/src/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sgr -d sgr_dev"]
       interval: 5s

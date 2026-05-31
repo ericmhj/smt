@@ -1,5 +1,6 @@
 # Single stage: install all deps and run with tsx
 FROM node:20-alpine
+RUN apk add --no-cache netcat-openbsd
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /app
 
@@ -15,7 +16,10 @@ RUN pnpm install --no-frozen-lockfile
 COPY packages/shared ./packages/shared
 COPY packages/backend ./packages/backend
 
+# Make entrypoint executable
+RUN chmod +x packages/backend/entrypoint.sh
+
 EXPOSE 3001
 
-# Run directly with tsx (TypeScript execution without build)
-CMD ["pnpm", "--filter", "@sgr/backend", "start"]
+# Use entrypoint that runs seed then starts server
+CMD ["sh", "packages/backend/entrypoint.sh"]

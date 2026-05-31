@@ -40,7 +40,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Register CORS
   await app.register(cors, {
-    origin: config.frontendUrl,
+    origin: true, // Allow all origins in development
     credentials: true,
   });
 

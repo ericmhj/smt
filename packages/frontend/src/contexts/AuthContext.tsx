@@ -30,15 +30,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await api<{
       accessToken: string;
       refreshToken: string;
-      user: User;
     }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
       skipAuth: true,
     });
 
-    setAuthData(data.accessToken, data.refreshToken, data.user);
-    setUser(data.user);
+    // Decode user info from JWT payload (Base64URL → Base64 → JSON)
+    const base64Url = data.accessToken.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(base64));
+    const user: User = {
+      id: payload.sub,
+      role: payload.role,
+      email: email,
+    };
+
+    setAuthData(data.accessToken, data.refreshToken, user);
+    setUser(user);
   }, []);
 
   const logout = useCallback(() => {

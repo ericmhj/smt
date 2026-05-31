@@ -3,29 +3,10 @@ import { randomBytes, createHmac } from 'node:crypto';
 // --- Helmet Configuration ---
 
 export const helmetConfig = {
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"], // unsafe-inline needed for Swagger UI
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'blob:'],
-      fontSrc: ["'self'"],
-      connectSrc: ["'self'"],
-      frameSrc: ["'none'"],
-      objectSrc: ["'none'"],
-      baseUri: ["'self'"],
-      formAction: ["'self'"],
-    },
-  },
-  hsts: {
-    maxAge: 31536000, // 1 year
-    includeSubDomains: true,
-    preload: true,
-  },
-  frameguard: { action: 'deny' as const },
-  noSniff: true,
-  xssFilter: true,
-  referrerPolicy: { policy: 'strict-origin-when-cross-origin' as const },
+  contentSecurityPolicy: false, // Disabled for development (frontend is on different origin)
+  hsts: false, // Not needed for localhost
+  crossOriginResourcePolicy: { policy: 'cross-origin' as const },
+  crossOriginOpenerPolicy: false,
 };
 
 // --- Rate Limit Configuration ---

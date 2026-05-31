@@ -3,9 +3,7 @@
 export interface User {
   id: string;
   email: string;
-  fullName: string;
-  role: 'superusuario' | 'administrador' | 'manager' | 'tecnico_de_campo';
-  isActive: boolean;
+  role: string;
 }
 
 export function getStoredUser(): User | null {
