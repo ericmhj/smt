@@ -19,8 +19,8 @@ export default function MyFormsPage() {
   useEffect(() => {
     const fetchMyForms = async () => {
       try {
-        const data = await api<{ assignments: MyForm[] }>('/api/assignments/my');
-        setForms(data.assignments || []);
+        const data = await api<MyForm[]>('/api/my-forms');
+        setForms(data || []);
       } catch {
         setForms([]);
       } finally {

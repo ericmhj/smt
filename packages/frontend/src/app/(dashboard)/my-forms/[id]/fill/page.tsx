@@ -7,6 +7,7 @@ import DynamicForm from '@/components/forms/DynamicForm';
 
 interface FormData {
   assignmentId: string;
+  formId: string;
   formName: string;
   htmlContent: string;
   formVersion: number;
@@ -42,7 +43,7 @@ export default function FillFormPage() {
       await api('/api/reactivos', {
         method: 'POST',
         body: JSON.stringify({
-          assignmentId: params.id,
+          formId: formData?.formId,
           responses,
         }),
       });

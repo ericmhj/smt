@@ -1,12 +1,12 @@
-type Role = 'superusuario' | 'administrador' | 'manager' | 'tecnico_de_campo';
+type Role = 'superusuario' | 'admin' | 'manager' | 'tecnico';
 
 const routePermissions: Record<string, Role[]> = {
-  '/users': ['superusuario', 'administrador'],
-  '/forms': ['superusuario', 'administrador', 'manager'],
-  '/assignments': ['superusuario', 'administrador', 'manager'],
-  '/kanban': ['superusuario', 'administrador', 'manager'],
-  '/my-forms': ['tecnico_de_campo'],
-  '/my-reactivos': ['tecnico_de_campo'],
+  '/users': ['superusuario', 'admin'],
+  '/forms': ['superusuario', 'admin', 'manager'],
+  '/assignments': ['superusuario', 'admin', 'manager'],
+  '/kanban': ['superusuario', 'admin', 'manager'],
+  '/my-forms': ['tecnico'],
+  '/my-reactivos': ['tecnico'],
 };
 
 export function canAccessRoute(role: Role, pathname: string): boolean {
@@ -23,11 +23,11 @@ export function canAccessRoute(role: Role, pathname: string): boolean {
 export function getDefaultRoute(role: Role): string {
   switch (role) {
     case 'superusuario':
-    case 'administrador':
+    case 'admin':
       return '/kanban';
     case 'manager':
       return '/kanban';
-    case 'tecnico_de_campo':
+    case 'tecnico':
       return '/my-forms';
     default:
       return '/';

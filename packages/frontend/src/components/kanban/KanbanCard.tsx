@@ -4,10 +4,10 @@ import Link from 'next/link';
 
 export interface KanbanCardData {
   id: string;
-  technicianName: string;
+  tecnicoName: string;
   formName: string;
-  attempt: number;
-  hasUnreadObservations: boolean;
+  attemptNumber: number;
+  unreadObservations: number;
   createdAt: string;
 }
 
@@ -21,13 +21,13 @@ export default function KanbanCard({ card }: KanbanCardProps) {
       <div className="bg-white rounded-md shadow-sm border border-gray-200 p-3 hover:shadow-md transition-shadow cursor-pointer">
         <div className="flex items-start justify-between">
           <p className="text-sm font-medium text-gray-800 truncate">{card.formName}</p>
-          {card.hasUnreadObservations && (
+          {card.unreadObservations > 0 && (
             <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 mt-1" />
           )}
         </div>
-        <p className="text-xs text-gray-500 mt-1">{card.technicianName}</p>
+        <p className="text-xs text-gray-500 mt-1">{card.tecnicoName}</p>
         <div className="flex items-center justify-between mt-2">
-          <span className="text-xs text-gray-400">Intento #{card.attempt}</span>
+          <span className="text-xs text-gray-400">Intento #{card.attemptNumber}</span>
           <span className="text-xs text-gray-400">
             {new Date(card.createdAt).toLocaleDateString('es')}
           </span>

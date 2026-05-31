@@ -21,8 +21,8 @@ export default function AssignmentsPage() {
   const fetchAssignments = async () => {
     setLoading(true);
     try {
-      const data = await api<{ assignments: Assignment[] }>('/api/assignments');
-      setAssignments(data.assignments || []);
+      const data = await api<{ data: Assignment[] }>('/api/assignments');
+      setAssignments(data.data || []);
     } catch {
       setAssignments([]);
     } finally {

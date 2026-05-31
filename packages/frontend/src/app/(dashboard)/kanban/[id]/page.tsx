@@ -44,7 +44,7 @@ export default function ReactivoDetailPage() {
 
   const fetchReactivo = async () => {
     try {
-      const data = await api<ReactivoData>(`/api/kanban/${params.id}`);
+      const data = await api<ReactivoData>(`/api/kanban/${params.id}/detail`);
       setReactivo(data);
     } catch {
       setReactivo(null);
@@ -57,12 +57,12 @@ export default function ReactivoDetailPage() {
     fetchReactivo();
   }, [params.id]);
 
-  const handleTransition = async (targetState: string, signatureData: string, reason?: string) => {
+  const handleTransition = async (targetState: string, signatureId: string, reason?: string) => {
     setTransitioning(true);
     try {
       await api(`/api/kanban/${params.id}/transition`, {
         method: 'POST',
-        body: JSON.stringify({ targetState, signatureData, reason }),
+        body: JSON.stringify({ toState: targetState, signatureId, reason }),
       });
       setShowTransition(false);
       fetchReactivo();

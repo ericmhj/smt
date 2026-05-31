@@ -5,10 +5,9 @@ import { useRouter } from 'next/navigation';
 
 interface UserFormData {
   email: string;
-  fullName: string;
+  name: string;
   password?: string;
   role: string;
-  isActive: boolean;
 }
 
 interface UserFormProps {
@@ -21,10 +20,9 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
   const router = useRouter();
   const [formData, setFormData] = useState<UserFormData>({
     email: initialData?.email || '',
-    fullName: initialData?.fullName || '',
+    name: initialData?.name || '',
     password: '',
-    role: initialData?.role || 'tecnico_de_campo',
-    isActive: initialData?.isActive ?? true,
+    role: initialData?.role || 'tecnico',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -58,8 +56,8 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
         <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo</label>
         <input
           type="text"
-          value={formData.fullName}
-          onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           required
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
@@ -96,22 +94,11 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
           onChange={(e) => setFormData({ ...formData, role: e.target.value })}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="tecnico_de_campo">Técnico de Campo</option>
+          <option value="tecnico">Técnico de Campo</option>
           <option value="manager">Manager</option>
-          <option value="administrador">Administrador</option>
+          <option value="admin">Administrador</option>
           <option value="superusuario">Superusuario</option>
         </select>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="isActive"
-          checked={formData.isActive}
-          onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-          className="rounded border-gray-300"
-        />
-        <label htmlFor="isActive" className="text-sm text-gray-700">Usuario activo</label>
       </div>
 
       <div className="flex gap-3 pt-4">

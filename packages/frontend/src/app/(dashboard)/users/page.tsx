@@ -17,8 +17,8 @@ export default function UsersPage() {
       const params = new URLSearchParams();
       if (roleFilter) params.set('role', roleFilter);
       if (activeFilter) params.set('isActive', activeFilter);
-      const data = await api<{ users: UserRow[] }>(`/api/users?${params.toString()}`);
-      setUsers(data.users || []);
+      const response = await api<{ data: UserRow[] }>(`/api/users?${params.toString()}`);
+      setUsers(response.data || []);
     } catch {
       setUsers([]);
     } finally {
@@ -32,10 +32,18 @@ export default function UsersPage() {
 
   const handleToggleActive = async (id: string, isActive: boolean) => {
     try {
-      await api(`/api/users/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isActive }),
-      });
+      if (isActive) {
+        // Reactivate: use PATCH update with role (backend doesn't have a dedicated activate endpoint for users)
+        await api(`/api/users/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ isActive: true }),
+        });
+      } else {
+        // Deactivate
+        await api(`/api/users/${id}/deactivate`, {
+          method: 'PATCH',
+        });
+      }
       fetchUsers();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error');
@@ -62,9 +70,9 @@ export default function UsersPage() {
         >
           <option value="">Todos los roles</option>
           <option value="superusuario">Superusuario</option>
-          <option value="administrador">Administrador</option>
+          <option value="admin">Administrador</option>
           <option value="manager">Manager</option>
-          <option value="tecnico_de_campo">Técnico de Campo</option>
+          <option value="tecnico">Técnico de Campo</option>
         </select>
 
         <select

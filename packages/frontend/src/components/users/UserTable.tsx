@@ -5,7 +5,7 @@ import Link from 'next/link';
 export interface UserRow {
   id: string;
   email: string;
-  fullName: string;
+  name: string;
   role: string;
   isActive: boolean;
   createdAt: string;
@@ -18,9 +18,9 @@ interface UserTableProps {
 
 const roleLabels: Record<string, string> = {
   superusuario: 'Superusuario',
-  administrador: 'Administrador',
+  admin: 'Administrador',
   manager: 'Manager',
-  tecnico_de_campo: 'Técnico de Campo',
+  tecnico: 'Técnico de Campo',
 };
 
 export default function UserTable({ users, onToggleActive }: UserTableProps) {
@@ -39,7 +39,7 @@ export default function UserTable({ users, onToggleActive }: UserTableProps) {
         <tbody className="bg-white divide-y divide-gray-200">
           {users.map((user) => (
             <tr key={user.id}>
-              <td className="px-4 py-3 text-sm text-gray-900">{user.fullName}</td>
+              <td className="px-4 py-3 text-sm text-gray-900">{user.name}</td>
               <td className="px-4 py-3 text-sm text-gray-500">{user.email}</td>
               <td className="px-4 py-3 text-sm text-gray-500">{roleLabels[user.role] || user.role}</td>
               <td className="px-4 py-3">

@@ -5,12 +5,14 @@ import { api } from '@/lib/api';
 import KanbanColumn from './KanbanColumn';
 import { KanbanCardData } from './KanbanCard';
 
-interface KanbanData {
-  pendiente: KanbanCardData[];
-  en_revision: KanbanCardData[];
-  validado: KanbanCardData[];
-  rechazado: KanbanCardData[];
-  finalizado: KanbanCardData[];
+interface KanbanColumn {
+  state: string;
+  label: string;
+  cards: KanbanCardData[];
+}
+
+interface KanbanResponse {
+  columns: KanbanColumn[];
 }
 
 const columns = [
@@ -22,13 +24,7 @@ const columns = [
 ];
 
 export default function KanbanBoard() {
-  const [data, setData] = useState<KanbanData>({
-    pendiente: [],
-    en_revision: [],
-    validado: [],
-    rechazado: [],
-    finalizado: [],
-  });
+  const [data, setData] = useState<KanbanColumn[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterTechnician, setFilterTechnician] = useState('');
   const [filterForm, setFilterForm] = useState('');
@@ -38,12 +34,12 @@ export default function KanbanBoard() {
       setLoading(true);
       try {
         const params = new URLSearchParams();
-        if (filterTechnician) params.set('technician', filterTechnician);
-        if (filterForm) params.set('form', filterForm);
-        const result = await api<KanbanData>(`/api/kanban?${params.toString()}`);
-        setData(result);
+        if (filterTechnician) params.set('tecnicoId', filterTechnician);
+        if (filterForm) params.set('formId', filterForm);
+        const result = await api<KanbanResponse>(`/api/kanban?${params.toString()}`);
+        setData(result.columns || []);
       } catch {
-        // keep empty
+        setData([]);
       } finally {
         setLoading(false);
       }
@@ -58,14 +54,14 @@ export default function KanbanBoard() {
       <div className="flex gap-4 mb-4">
         <input
           type="text"
-          placeholder="Filtrar por técnico..."
+          placeholder="Filtrar por técnico (UUID)..."
           value={filterTechnician}
           onChange={(e) => setFilterTechnician(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-md text-sm"
         />
         <input
           type="text"
-          placeholder="Filtrar por formulario..."
+          placeholder="Filtrar por formulario (UUID)..."
           value={filterForm}
           onChange={(e) => setFilterForm(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-md text-sm"
@@ -73,15 +69,18 @@ export default function KanbanBoard() {
       </div>
 
       <div className="flex gap-4 overflow-x-auto pb-4">
-        {columns.map((col) => (
-          <KanbanColumn
-            key={col.key}
-            title={col.title}
-            state={col.key}
-            cards={data[col.key as keyof KanbanData] || []}
-            color={col.color}
-          />
-        ))}
+        {columns.map((col) => {
+          const column = data.find((c) => c.state === col.key);
+          return (
+            <KanbanColumn
+              key={col.key}
+              title={col.title}
+              state={col.key}
+              cards={column?.cards || []}
+              color={col.color}
+            />
+          );
+        })}
       </div>
     </div>
   );

@@ -14,8 +14,8 @@ export default function MyReactivosPage() {
     try {
       const params = new URLSearchParams();
       if (stateFilter) params.set('state', stateFilter);
-      const data = await api<{ reactivos: ReactivoItem[] }>(`/api/reactivos/my?${params.toString()}`);
-      setReactivos(data.reactivos || []);
+      const data = await api<{ data: ReactivoItem[] }>(`/api/my-reactivos?${params.toString()}`);
+      setReactivos(data.data || []);
     } catch {
       setReactivos([]);
     } finally {

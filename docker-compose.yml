@@ -77,6 +77,9 @@ services:
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://localhost:3001
+    volumes:
+      - ./packages/frontend/src:/app/packages/frontend/src
+      - ./packages/frontend/.env.local:/app/packages/frontend/.env.local
     depends_on:
       - backend
     healthcheck:

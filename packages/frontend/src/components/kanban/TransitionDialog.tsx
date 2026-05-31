@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { api, apiUpload } from '@/lib/api';
 import SignatureCanvas from '@/components/signature/SignatureCanvas';
 import SignatureUpload from '@/components/signature/SignatureUpload';
 
 interface TransitionDialogProps {
   currentState: string;
   availableStates: string[];
-  onConfirm: (targetState: string, signatureData: string, reason?: string) => void;
+  onConfirm: (targetState: string, signatureId: string, reason?: string) => void;
   onCancel: () => void;
   loading?: boolean;
 }
@@ -31,10 +32,11 @@ export default function TransitionDialog({
   const [reason, setReason] = useState('');
   const [signatureData, setSignatureData] = useState('');
   const [signatureMode, setSignatureMode] = useState<'draw' | 'upload'>('draw');
+  const [uploading, setUploading] = useState(false);
 
   const requiresReason = targetState === 'rechazado';
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!signatureData) {
       alert('Debe proporcionar una firma');
       return;
@@ -43,7 +45,22 @@ export default function TransitionDialog({
       alert('Debe proporcionar un motivo para el rechazo');
       return;
     }
-    onConfirm(targetState, signatureData, reason || undefined);
+
+    setUploading(true);
+    try {
+      // Upload signature to get a signatureId
+      const blob = await fetch(signatureData).then((r) => r.blob());
+      const formData = new FormData();
+      formData.append('file', blob, 'signature.png');
+      formData.append('type', signatureMode === 'draw' ? 'canvas' : 'upload');
+
+      const result = await apiUpload<{ id: string }>('/api/signatures', formData);
+      onConfirm(targetState, result.id, reason || undefined);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al subir la firma');
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -114,10 +131,10 @@ export default function TransitionDialog({
         <div className="flex gap-3 mt-6 pt-4 border-t">
           <button
             onClick={handleConfirm}
-            disabled={loading || !signatureData}
+            disabled={loading || uploading || !signatureData}
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
           >
-            {loading ? 'Procesando...' : 'Confirmar transición'}
+            {loading || uploading ? 'Procesando...' : 'Confirmar transición'}
           </button>
           <button
             onClick={onCancel}

@@ -11,19 +11,31 @@ interface FormVersion {
   changeType: string;
 }
 
+interface FormVersionData {
+  id: string;
+  formId: string;
+  versionNumber: number;
+  htmlContent: string;
+  sanitizedHtml: string;
+  changeType: string;
+  createdBy: string;
+  createdAt: string;
+}
+
 interface FormDetail {
   id: string;
   name: string;
-  description?: string;
   isActive: boolean;
   currentVersion: number;
-  htmlContent: string;
-  versions: FormVersion[];
+  currentVersionData: FormVersionData;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export default function FormDetailPage() {
   const params = useParams();
   const [form, setForm] = useState<FormDetail | null>(null);
+  const [versions, setVersions] = useState<FormVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
 
@@ -32,6 +44,13 @@ export default function FormDetailPage() {
       try {
         const data = await api<FormDetail>(`/api/forms/${params.id}`);
         setForm(data);
+        // Fetch version history separately
+        try {
+          const versionData = await api<FormVersion[]>(`/api/forms/${params.id}/versions`);
+          setVersions(versionData || []);
+        } catch {
+          setVersions([]);
+        }
       } catch {
         setForm(null);
       } finally {
@@ -49,7 +68,6 @@ export default function FormDetailPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">{form.name}</h1>
-          {form.description && <p className="text-gray-500 text-sm">{form.description}</p>}
         </div>
         <div className="flex gap-2">
           <button
@@ -74,12 +92,12 @@ export default function FormDetailPage() {
               <span className="text-sm text-gray-500">Versión actual: v{form.currentVersion}</span>
             </div>
 
-            {showPreview && form.htmlContent && (
+            {showPreview && form.currentVersionData?.htmlContent && (
               <div className="border rounded-md p-4 mt-4">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">Vista previa</h3>
                 <div
                   className="prose max-w-none"
-                  dangerouslySetInnerHTML={{ __html: form.htmlContent }}
+                  dangerouslySetInnerHTML={{ __html: form.currentVersionData.htmlContent }}
                 />
               </div>
             )}
@@ -90,8 +108,8 @@ export default function FormDetailPage() {
           <div className="bg-white rounded-lg shadow p-4">
             <h3 className="text-sm font-medium text-gray-700 mb-3">Historial de versiones</h3>
             <div className="space-y-2">
-              {form.versions && form.versions.length > 0 ? (
-                form.versions.map((v) => (
+              {versions.length > 0 ? (
+                versions.map((v) => (
                   <div key={v.version} className="flex items-center justify-between text-sm border-b pb-2">
                     <span className="font-medium">v{v.version}</span>
                     <span className="text-gray-500 text-xs">

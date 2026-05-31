@@ -7,10 +7,10 @@ export interface ReactivoItem {
   id: string;
   formName: string;
   state: string;
-  attempt: number;
+  attemptNumber: number;
   createdAt: string;
   rejectionReason?: string;
-  assignmentId?: string;
+  formId?: string;
 }
 
 interface ReactivoListProps {
@@ -47,7 +47,7 @@ export default function ReactivoList({ reactivos, onReapply }: ReactivoListProps
             <div>
               <h3 className="font-medium text-gray-800">{r.formName}</h3>
               <p className="text-xs text-gray-500 mt-0.5">
-                Intento #{r.attempt} • {new Date(r.createdAt).toLocaleDateString('es')}
+                Intento #{r.attemptNumber} • {new Date(r.createdAt).toLocaleDateString('es')}
               </p>
             </div>
             <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${stateColors[r.state] || 'bg-gray-100 text-gray-800'}`}>
@@ -78,8 +78,8 @@ export default function ReactivoList({ reactivos, onReapply }: ReactivoListProps
             >
               Descargar PDF
             </a>
-            {r.state === 'rechazado' && r.assignmentId && (
-              <ReapplyButton assignmentId={r.assignmentId} onSuccess={onReapply} />
+            {r.state === 'rechazado' && r.formId && (
+              <ReapplyButton assignmentId={r.formId} onSuccess={onReapply} />
             )}
           </div>
         </div>

@@ -15,7 +15,7 @@ interface SelectOption {
 export default function AssignmentForm({ onSuccess }: AssignmentFormProps) {
   const [technicians, setTechnicians] = useState<SelectOption[]>([]);
   const [forms, setForms] = useState<SelectOption[]>([]);
-  const [userId, setUserId] = useState('');
+  const [tecnicoId, setTecnicoId] = useState('');
   const [formId, setFormId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,14 +24,14 @@ export default function AssignmentForm({ onSuccess }: AssignmentFormProps) {
     const fetchOptions = async () => {
       try {
         const [usersData, formsData] = await Promise.all([
-          api<{ users: { id: string; fullName: string; role: string }[] }>('/api/users?role=tecnico_de_campo&isActive=true'),
-          api<{ forms: { id: string; name: string; isActive: boolean }[] }>('/api/forms'),
+          api<{ data: { id: string; name: string; role: string }[] }>('/api/users?role=tecnico&isActive=true'),
+          api<{ data: { id: string; name: string; isActive: boolean }[] }>('/api/forms'),
         ]);
         setTechnicians(
-          (usersData.users || []).map((u) => ({ id: u.id, name: u.fullName }))
+          (usersData.data || []).map((u) => ({ id: u.id, name: u.name }))
         );
         setForms(
-          (formsData.forms || []).filter((f) => f.isActive).map((f) => ({ id: f.id, name: f.name }))
+          (formsData.data || []).filter((f) => f.isActive).map((f) => ({ id: f.id, name: f.name }))
         );
       } catch {
         // ignore
@@ -48,9 +48,9 @@ export default function AssignmentForm({ onSuccess }: AssignmentFormProps) {
     try {
       await api('/api/assignments', {
         method: 'POST',
-        body: JSON.stringify({ userId, formId }),
+        body: JSON.stringify({ tecnicoId, formId }),
       });
-      setUserId('');
+      setTecnicoId('');
       setFormId('');
       onSuccess();
     } catch (err) {
@@ -69,8 +69,8 @@ export default function AssignmentForm({ onSuccess }: AssignmentFormProps) {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Técnico</label>
         <select
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
+          value={tecnicoId}
+          onChange={(e) => setTecnicoId(e.target.value)}
           required
           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >

@@ -22,8 +22,8 @@ export default function FormsPage() {
   const fetchForms = async () => {
     setLoading(true);
     try {
-      const data = await api<{ forms: FormItem[] }>('/api/forms');
-      setForms(data.forms || []);
+      const response = await api<{ data: FormItem[] }>('/api/forms');
+      setForms(response.data || []);
     } catch {
       setForms([]);
     } finally {
@@ -37,9 +37,9 @@ export default function FormsPage() {
 
   const handleToggleActive = async (id: string, isActive: boolean) => {
     try {
-      await api(`/api/forms/${id}`, {
+      const action = isActive ? 'activate' : 'deactivate';
+      await api(`/api/forms/${id}/${action}`, {
         method: 'PATCH',
-        body: JSON.stringify({ isActive }),
       });
       fetchForms();
     } catch (err) {

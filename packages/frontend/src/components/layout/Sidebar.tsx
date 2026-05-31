@@ -11,12 +11,12 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Tablero Kanban', href: '/kanban', roles: ['superusuario', 'administrador', 'manager'] },
-  { label: 'Usuarios', href: '/users', roles: ['superusuario', 'administrador'] },
-  { label: 'Formularios', href: '/forms', roles: ['superusuario', 'administrador', 'manager'] },
-  { label: 'Asignaciones', href: '/assignments', roles: ['superusuario', 'administrador', 'manager'] },
-  { label: 'Mis Formularios', href: '/my-forms', roles: ['tecnico_de_campo'] },
-  { label: 'Mis Reactivos', href: '/my-reactivos', roles: ['tecnico_de_campo'] },
+  { label: 'Tablero Kanban', href: '/kanban', roles: ['superusuario', 'admin', 'manager'] },
+  { label: 'Usuarios', href: '/users', roles: ['superusuario', 'admin'] },
+  { label: 'Formularios', href: '/forms', roles: ['superusuario', 'admin', 'manager'] },
+  { label: 'Asignaciones', href: '/assignments', roles: ['superusuario', 'admin', 'manager'] },
+  { label: 'Mis Formularios', href: '/my-forms', roles: ['tecnico'] },
+  { label: 'Mis Reactivos', href: '/my-reactivos', roles: ['tecnico'] },
 ];
 
 export default function Sidebar() {
