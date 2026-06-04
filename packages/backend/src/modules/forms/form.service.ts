@@ -498,4 +498,21 @@ export class FormService {
       slug = `${baseSlug}-${counter}`;
     }
   }
+
+  async delete(formId: string, _actor: JWTPayload): Promise<void> {
+    const formResult = await this.db
+      .select()
+      .from(forms)
+      .where(eq(forms.id, formId))
+      .limit(1);
+
+    if (formResult.length === 0) {
+      throw new FormError(404, FormErrorCode.FORM_NOT_FOUND, 'Formulario no encontrado');
+    }
+
+    // Delete form versions first (FK constraint)
+    await this.db.delete(formVersions).where(eq(formVersions.formId, formId));
+    // Delete the form
+    await this.db.delete(forms).where(eq(forms.id, formId));
+  }
 }

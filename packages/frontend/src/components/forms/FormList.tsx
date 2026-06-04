@@ -6,9 +6,11 @@ import type { FormItem } from '@/app/(dashboard)/forms/page';
 interface FormListProps {
   forms: FormItem[];
   onToggleActive?: (id: string, isActive: boolean) => void;
+  onDelete?: (id: string) => void;
+  userRole?: string;
 }
 
-export default function FormList({ forms, onToggleActive }: FormListProps) {
+export default function FormList({ forms, onToggleActive, onDelete, userRole }: FormListProps) {
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <table className="min-w-full divide-y divide-gray-200">
@@ -51,6 +53,14 @@ export default function FormList({ forms, onToggleActive }: FormListProps) {
                     className={form.isActive ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}
                   >
                     {form.isActive ? 'Desactivar' : 'Activar'}
+                  </button>
+                )}
+                {onDelete && userRole === 'superusuario' && (
+                  <button
+                    onClick={() => { if(confirm('¿Eliminar este formulario? Esta acción no se puede deshacer.')) onDelete(form.id); }}
+                    className="text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Eliminar
                   </button>
                 )}
               </td>

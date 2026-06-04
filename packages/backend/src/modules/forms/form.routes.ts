@@ -267,4 +267,30 @@ export async function formRoutes(
       }
     },
   );
+
+  // DELETE /api/forms/:id — delete form (superusuario only)
+  const superOnly = requireRole(['superusuario']);
+  fastify.delete(
+    '/api/forms/:id',
+    { preHandler: [superOnly] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      try {
+        await formService.delete(id, request.user);
+        return reply.status(200).send({ message: 'Formulario eliminado exitosamente' });
+      } catch (error) {
+        if (error instanceof FormError) {
+          return reply.status(error.statusCode).send({
+            statusCode: error.statusCode,
+            code: error.code,
+            message: error.message,
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+        throw error;
+      }
+    },
+  );
 }

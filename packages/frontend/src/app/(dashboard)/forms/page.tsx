@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 import FormList from '@/components/forms/FormList';
 
 export interface FormItem {
@@ -18,6 +19,7 @@ export interface FormItem {
 export default function FormsPage() {
   const [forms, setForms] = useState<FormItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
   const fetchForms = async () => {
     setLoading(true);
@@ -47,6 +49,15 @@ export default function FormsPage() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    try {
+      await api(`/api/forms/${id}`, { method: 'DELETE' });
+      fetchForms();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al eliminar');
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -62,7 +73,12 @@ export default function FormsPage() {
       {loading ? (
         <p className="text-gray-500">Cargando...</p>
       ) : (
-        <FormList forms={forms} onToggleActive={handleToggleActive} />
+        <FormList
+          forms={forms}
+          onToggleActive={handleToggleActive}
+          onDelete={handleDelete}
+          userRole={user?.role}
+        />
       )}
     </div>
   );

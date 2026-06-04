@@ -76,7 +76,16 @@ export default function ReactivoDetailPage() {
   if (loading) return <p className="text-gray-500">Cargando...</p>;
   if (!reactivo) return <p className="text-red-500">Reactivo no encontrado.</p>;
 
-  const canTransition = user?.role === 'manager' && reactivo.availableTransitions.length > 0;
+  // Calculate available transitions based on current state
+  const VALID_TRANSITIONS: Record<string, string[]> = {
+    pendiente: ['en_revision'],
+    en_revision: ['validado', 'rechazado'],
+    validado: ['finalizado'],
+    rechazado: [],
+    finalizado: [],
+  };
+  const availableTransitions = VALID_TRANSITIONS[reactivo.state] || [];
+  const canTransition = user?.role === 'manager' && availableTransitions.length > 0;
 
   return (
     <div>
@@ -105,7 +114,7 @@ export default function ReactivoDetailPage() {
       {showTransition && (
         <TransitionDialog
           currentState={reactivo.state}
-          availableStates={reactivo.availableTransitions}
+          availableStates={availableTransitions}
           onConfirm={handleTransition}
           onCancel={() => setShowTransition(false)}
           loading={transitioning}

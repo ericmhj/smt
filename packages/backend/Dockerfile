@@ -1,6 +1,8 @@
 # Single stage: install all deps and run with tsx
 FROM node:20-alpine
-RUN apk add --no-cache netcat-openbsd
+RUN apk add --no-cache netcat-openbsd chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /app
 
