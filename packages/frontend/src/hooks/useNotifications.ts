@@ -29,8 +29,15 @@ export function useNotifications() {
       });
       if (res.ok) {
         const data = await res.json();
-        setNotifications(data.notifications || []);
-        setUnreadCount(data.unreadCount || 0);
+        setNotifications(data.data || []);
+      }
+
+      const countRes = await fetch(`${API_BASE_URL}/api/notifications/unread-count`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (countRes.ok) {
+        const countData = await countRes.json();
+        setUnreadCount(countData.count || 0);
       }
     } catch {
       // ignore
@@ -40,37 +47,9 @@ export function useNotifications() {
   useEffect(() => {
     fetchNotifications();
 
-    // SSE connection for real-time notifications
-    const token = getAccessToken();
-    if (!token) return;
-
-    let eventSource: EventSource | null = null;
-
-    try {
-      eventSource = new EventSource(
-        `${API_BASE_URL}/api/notifications/stream?token=${token}`
-      );
-
-      eventSource.onmessage = (event) => {
-        try {
-          const notification = JSON.parse(event.data) as Notification;
-          setNotifications((prev) => [notification, ...prev]);
-          setUnreadCount((prev) => prev + 1);
-        } catch {
-          // ignore parse errors
-        }
-      };
-
-      eventSource.onerror = () => {
-        eventSource?.close();
-      };
-    } catch {
-      // SSE not available, fall back to polling
-    }
-
-    return () => {
-      eventSource?.close();
-    };
+    // Poll for new notifications every 30 seconds (SSE disabled for now)
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
   }, [fetchNotifications]);
 
   const markAsRead = useCallback(async (id: string) => {

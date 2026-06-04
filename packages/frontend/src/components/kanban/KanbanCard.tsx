@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export interface KanbanCardData {
   id: string;
@@ -9,30 +9,43 @@ export interface KanbanCardData {
   attemptNumber: number;
   unreadObservations: number;
   createdAt: string;
+  state: string;
 }
 
 interface KanbanCardProps {
   card: KanbanCardData;
+  draggable?: boolean;
 }
 
-export default function KanbanCard({ card }: KanbanCardProps) {
+export default function KanbanCard({ card, draggable }: KanbanCardProps) {
+  const router = useRouter();
+
   return (
-    <Link href={`/kanban/${card.id}`}>
-      <div className="bg-white rounded-md shadow-sm border border-gray-200 p-3 hover:shadow-md transition-shadow cursor-pointer">
-        <div className="flex items-start justify-between">
-          <p className="text-sm font-medium text-gray-800 truncate">{card.formName}</p>
-          {card.unreadObservations > 0 && (
-            <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 mt-1" />
-          )}
-        </div>
-        <p className="text-xs text-gray-500 mt-1">{card.tecnicoName}</p>
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-xs text-gray-400">Intento #{card.attemptNumber}</span>
-          <span className="text-xs text-gray-400">
-            {new Date(card.createdAt).toLocaleDateString('es')}
-          </span>
-        </div>
+    <div
+      draggable={draggable || false}
+      onDragStart={(e) => {
+        e.dataTransfer.setData('cardId', card.id);
+        e.dataTransfer.setData('fromState', card.state);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      onClick={() => router.push(`/kanban/${card.id}`)}
+      className={`bg-white rounded-md shadow-sm border border-gray-200 p-3 hover:shadow-md transition-shadow select-none ${
+        draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+      }`}
+    >
+      <div className="flex items-start justify-between">
+        <p className="text-sm font-medium text-gray-800 truncate">{card.formName}</p>
+        {card.unreadObservations > 0 && (
+          <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 mt-1" />
+        )}
       </div>
-    </Link>
+      <p className="text-xs text-gray-500 mt-1">{card.tecnicoName}</p>
+      <div className="flex items-center justify-between mt-2">
+        <span className="text-xs text-gray-400">Intento #{card.attemptNumber}</span>
+        <span className="text-xs text-gray-400">
+          {new Date(card.createdAt).toLocaleDateString('es')}
+        </span>
+      </div>
+    </div>
   );
 }
