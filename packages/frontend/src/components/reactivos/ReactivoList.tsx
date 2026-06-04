@@ -65,19 +65,33 @@ export default function ReactivoList({ reactivos, onReapply }: ReactivoListProps
 
           <div className="flex items-center gap-2 mt-3">
             <Link
-              href={`/kanban/${r.id}`}
+              href={`/my-reactivos/${r.id}`}
               className="text-xs text-blue-600 hover:text-blue-800"
             >
               Ver detalle
             </Link>
-            <a
-              href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/reactivos/${r.id}/pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={async () => {
+                const token = localStorage.getItem('access_token');
+                const res = await fetch(`http://localhost:3001/api/reactivos/${r.id}/pdf`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (res.ok) {
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `reactivo-${r.id}.pdf`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } else {
+                  alert('Error al descargar PDF');
+                }
+              }}
               className="text-xs text-green-600 hover:text-green-800"
             >
               Descargar PDF
-            </a>
+            </button>
             {r.state === 'rechazado' && r.formId && (
               <ReapplyButton assignmentId={r.formId} onSuccess={onReapply} />
             )}

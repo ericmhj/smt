@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { loginSchema, refreshSchema } from './auth.schemas.js';
 import type { AuthService } from './auth.service.js';
 import { AuthError } from './auth.service.js';
@@ -9,8 +9,7 @@ export async function authRoutes(
 ): Promise<void> {
   const { authService } = opts;
 
-  // POST /api/auth/login
-  fastify.post('/api/auth/login', async (request, reply) => {
+  async function handleLogin(request: FastifyRequest, reply: FastifyReply) {
     const parseResult = loginSchema.safeParse(request.body);
 
     if (!parseResult.success) {
@@ -42,10 +41,13 @@ export async function authRoutes(
       }
       throw error;
     }
-  });
+  }
 
-  // POST /api/auth/refresh
-  fastify.post('/api/auth/refresh', async (request, reply) => {
+  // POST /api/auth/login
+  fastify.post('/api/auth/login', handleLogin);
+  fastify.post('/api/v1/auth/login', handleLogin);
+
+  async function handleRefresh(request: FastifyRequest, reply: FastifyReply) {
     const parseResult = refreshSchema.safeParse(request.body);
 
     if (!parseResult.success) {
@@ -77,10 +79,12 @@ export async function authRoutes(
       }
       throw error;
     }
-  });
+  }
 
-  // POST /api/auth/logout
-  fastify.post('/api/auth/logout', async (request, reply) => {
+  fastify.post('/api/auth/refresh', handleRefresh);
+  fastify.post('/api/v1/auth/refresh', handleRefresh);
+
+  async function handleLogout(request: FastifyRequest, reply: FastifyReply) {
     const user = request.user;
 
     if (!user) {
@@ -110,5 +114,8 @@ export async function authRoutes(
       }
       throw error;
     }
-  });
+  }
+
+  fastify.post('/api/auth/logout', handleLogout);
+  fastify.post('/api/v1/auth/logout', handleLogout);
 }

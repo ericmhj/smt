@@ -178,6 +178,7 @@ export class UserService {
     if (data.name) updateValues.name = data.name;
     if (data.email) updateValues.email = data.email;
     if (data.role) updateValues.role = data.role;
+    if (data.isActive !== undefined) updateValues.isActive = data.isActive;
     if (data.password) {
       updateValues.passwordHash = await bcrypt.hash(data.password, 12);
     }

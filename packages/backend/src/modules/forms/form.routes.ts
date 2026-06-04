@@ -12,7 +12,7 @@ export async function formRoutes(
   const formService = new FormService(opts.db);
 
   const adminRoles = requireRole(['superusuario', 'admin']);
-  const readRoles = requireRole(['superusuario', 'admin', 'manager']);
+  const readRoles = requireRole(['superusuario', 'admin', 'manager', 'tecnico']);
 
   // POST /api/forms — create form from HTML
   fastify.post(

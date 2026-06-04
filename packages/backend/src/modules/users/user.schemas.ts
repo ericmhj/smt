@@ -14,6 +14,7 @@ export const updateUserSchema = z.object({
   password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres').optional(),
   name: z.string().min(1, 'El nombre es requerido').max(255).optional(),
   role: z.enum(roleValues, { errorMap: () => ({ message: 'Rol inválido' }) }).optional(),
+  isActive: z.boolean().optional(),
 });
 
 export const userFiltersSchema = z.object({

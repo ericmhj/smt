@@ -1,4 +1,4 @@
-export type Role = 'superusuario' | 'admin' | 'manager' | 'tecnico' | 'tecnico_de_campo';
+export type Role = 'superusuario' | 'admin' | 'manager' | 'tecnico';
 
 export interface CreateUserDTO {
   email: string;
@@ -12,6 +12,7 @@ export interface UpdateUserDTO {
   password?: string;
   name?: string;
   role?: Role;
+  isActive?: boolean;
 }
 
 export interface UserResponse {

@@ -35,6 +35,8 @@ export default function DynamicForm({ htmlContent, onSubmit, submitting }: Dynam
         if (input.checked) {
           responses[name] = input.value;
         }
+      } else if (input instanceof HTMLInputElement && (input.type === 'number' || input.type === 'range')) {
+        responses[name] = input.value === '' ? undefined : Number(input.value);
       } else {
         responses[name] = input.value;
       }
@@ -67,8 +69,9 @@ export default function DynamicForm({ htmlContent, onSubmit, submitting }: Dynam
 
       <div
         ref={formRef}
-        className="prose max-w-none mb-6"
+        className="mb-6"
         dangerouslySetInnerHTML={{ __html: htmlContent }}
+        style={{ all: 'initial' }}
       />
 
       <div className="flex gap-3 pt-4 border-t">

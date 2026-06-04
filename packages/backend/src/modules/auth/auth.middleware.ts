@@ -4,6 +4,9 @@ import type { AuthService } from './auth.service.js';
 
 const PUBLIC_ROUTES: Array<{ method: string; url: string }> = [
   { method: 'POST', url: '/api/auth/login' },
+  { method: 'POST', url: '/api/v1/auth/login' },
+  { method: 'POST', url: '/api/auth/refresh' },
+  { method: 'POST', url: '/api/v1/auth/refresh' },
   { method: 'GET', url: '/api/health' },
   { method: 'GET', url: '/api/docs' },
 ];

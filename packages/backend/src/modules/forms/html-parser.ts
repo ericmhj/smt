@@ -47,6 +47,18 @@ const ALLOWED_TAGS = [
   'small',
   'a',
   'img',
+  'style',
+  'head',
+  'body',
+  'html',
+  'meta',
+  'title',
+  'header',
+  'footer',
+  'section',
+  'article',
+  'nav',
+  'main',
 ];
 
 const ALLOWED_ATTRS = [
@@ -151,24 +163,21 @@ export class HTMLParser {
     const document = dom.window.document;
 
     const fields: FormField[] = [];
+    const seenNames = new Set<string>();
     const fieldElements = document.querySelectorAll('input, select, textarea');
 
     for (const element of fieldElements) {
       const name = element.getAttribute('name');
       if (!name) continue;
 
+      // Skip duplicate names (radio buttons share the same name)
+      if (seenNames.has(name)) continue;
+      seenNames.add(name);
+
       const field = HTMLParser.extractFieldMetadata(element, document);
       if (field) {
         fields.push(field);
       }
-    }
-
-    // Validate unique names
-    const names = fields.map((f) => f.name);
-    const uniqueNames = new Set(names);
-    if (uniqueNames.size !== names.length) {
-      const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
-      throw new Error(`Duplicate field names found: ${[...new Set(duplicates)].join(', ')}`);
     }
 
     return fields;
