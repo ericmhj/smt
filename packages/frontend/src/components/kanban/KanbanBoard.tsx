@@ -26,8 +26,8 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 };
 
 const columnsConfig = [
-  { key: 'pendiente', title: 'Pendiente', color: '#eab308' },
-  { key: 'en_revision', title: 'En revisión', color: '#3b82f6' },
+  { key: 'pendiente', title: 'Programado', color: '#eab308' },
+  { key: 'en_revision', title: 'En Evaluación', color: '#3b82f6' },
   { key: 'validado', title: 'Validado', color: '#22c55e' },
   { key: 'rechazado', title: 'Rechazado', color: '#ef4444' },
   { key: 'finalizado', title: 'Finalizado', color: '#6b7280' },
