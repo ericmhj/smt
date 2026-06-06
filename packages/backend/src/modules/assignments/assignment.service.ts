@@ -63,7 +63,7 @@ export class AssignmentService {
       );
     }
 
-    if (tecnico.role !== 'tecnico' && tecnico.role !== 'tecnico_de_campo') {
+    if (tecnico.role !== 'tecnico') {
       throw new AssignmentError(
         400,
         AssignmentErrorCode.TECNICO_INVALID_ROLE,

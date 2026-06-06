@@ -28,6 +28,8 @@ export const reactivos = pgTable('reactivos', {
   state: varchar('state', { length: 50 }).notNull().default('pendiente'),
   responses: jsonb('responses').notNull(),
   rejectionReason: varchar('rejection_reason', { length: 1000 }),
+  fechaProgramada: timestamp('fecha_programada', { withTimezone: true }),
+  clienteNombre: varchar('cliente_nombre', { length: 255 }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

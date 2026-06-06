@@ -10,8 +10,8 @@ const roleLabels: Record<string, string> = {
   superusuario: 'Superusuario',
   admin: 'Administrador',
   manager: 'Manager',
-  tecnico: 'Técnico de Campo',
-  tecnico_de_campo: 'Técnico de Campo',
+  tecnico: 'Técnico',
+  asistente: 'Asistente',
 };
 
 export default function Header() {
@@ -39,7 +39,7 @@ export default function Header() {
           )}
         </div>
         <div className="text-right">
-          <p className="text-sm font-medium text-gray-700">{user.email}</p>
+          <p className="text-sm font-medium text-gray-700">{user.name}</p>
           <p className="text-xs text-gray-500">{roleLabels[user.role] || user.role}</p>
         </div>
         <button

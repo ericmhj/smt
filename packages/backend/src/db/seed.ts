@@ -25,6 +25,7 @@ async function seed() {
   const adminPassword = await hashPassword('admin123');
   const managerPassword = await hashPassword('manager123');
   const tecnicoPassword = await hashPassword('tecnico123');
+  const asistentePassword = await hashPassword('asistente123');
 
   const [superusuario] = await db
     .insert(schema.users)
@@ -70,6 +71,17 @@ async function seed() {
     .onConflictDoNothing({ target: schema.users.email })
     .returning();
 
+  const [asistente] = await db
+    .insert(schema.users)
+    .values({
+      email: 'asistente@sgr.local',
+      passwordHash: asistentePassword,
+      name: 'Asistente de Prueba',
+      role: 'asistente',
+    })
+    .onConflictDoNothing({ target: schema.users.email })
+    .returning();
+
   // If users already exist, fetch them
   const { eq } = await import('drizzle-orm');
   const allUsers = await db.select().from(schema.users);
@@ -77,6 +89,7 @@ async function seed() {
   const ad = admin || allUsers.find(u => u.email === 'administrador@sgr.local')!;
   const mg = manager || allUsers.find(u => u.email === 'manager@sgr.local')!;
   const tc = tecnico || allUsers.find(u => u.email === 'tecnico@sgr.local')!;
+  const as_ = asistente || allUsers.find(u => u.email === 'asistente@sgr.local')!;
 
   console.log('✅ Users created/verified');
 
@@ -223,6 +236,7 @@ async function seed() {
   console.log('  Admin:        administrador@sgr.local / admin123');
   console.log('  Manager:      manager@sgr.local / manager123');
   console.log('  Técnico:      tecnico@sgr.local / tecnico123');
+  console.log('  Asistente:    asistente@sgr.local / asistente123');
 
   await client.end();
 }

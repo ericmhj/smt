@@ -19,7 +19,7 @@ describe('Test Framework Setup', () => {
   it('shared arbitraries generate valid roles', () => {
     fc.assert(
       fc.property(arbitraries.role(), (role) => {
-        const validRoles = ['superusuario', 'administrador', 'manager', 'tecnico_de_campo'];
+        const validRoles = ['superusuario', 'admin', 'manager', 'tecnico', 'asistente'];
         return validRoles.includes(role);
       }),
       { numRuns: 100 },

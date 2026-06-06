@@ -3,6 +3,17 @@ export interface TokenPair {
   refreshToken: string;
 }
 
+export interface LoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+}
+
 export interface JWTPayload {
   sub: string;
   role: string;

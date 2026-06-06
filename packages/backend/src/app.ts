@@ -20,6 +20,9 @@ import { signatureRoutes } from './modules/signatures/signature.routes.js';
 import { observationRoutes } from './modules/observations/observation.routes.js';
 import { notificationRoutes } from './modules/notifications/notification.routes.js';
 import { auditRoutes } from './modules/audit/audit.routes.js';
+import { clienteRoutes } from './modules/clientes/cliente.routes.js';
+import { documentoRoutes } from './modules/clientes/documento.routes.js';
+import { ticketRoutes } from './modules/tickets/ticket.routes.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const config = loadConfig();
@@ -98,6 +101,15 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Register catalog routes
   await app.register(catalogRoutes, { db });
+
+  // Register cliente routes
+  await app.register(clienteRoutes, { db });
+
+  // Register documento routes
+  await app.register(documentoRoutes, { db });
+
+  // Register ticket routes
+  await app.register(ticketRoutes, { db });
 
   return app;
 }

@@ -9,9 +9,10 @@ export const arbitraries = {
   role(): fc.Arbitrary<Role> {
     return fc.constantFrom<Role>(
       'superusuario',
-      'administrador',
+      'admin',
       'manager',
-      'tecnico_de_campo',
+      'tecnico',
+      'asistente',
     );
   },
 

@@ -22,19 +22,19 @@ export default function AssignmentForm({ onSuccess }: AssignmentFormProps) {
 
   useEffect(() => {
     const fetchOptions = async () => {
-      try {
-        const [usersData, formsData] = await Promise.all([
-          api<{ data: { id: string; name: string; role: string }[] }>('/api/users?role=tecnico&isActive=true'),
-          api<{ data: { id: string; name: string; isActive: boolean }[] }>('/api/forms'),
-        ]);
+      const [usersRes, formsRes] = await Promise.allSettled([
+        api<{ data: { id: string; name: string; role: string }[] }>('/api/users/tecnicos'),
+        api<{ data: { id: string; name: string; isActive: boolean }[] }>('/api/forms'),
+      ]);
+      if (usersRes.status === 'fulfilled') {
         setTechnicians(
-          (usersData.data || []).map((u) => ({ id: u.id, name: u.name }))
+          (usersRes.value.data || []).map((u) => ({ id: u.id, name: u.name }))
         );
+      }
+      if (formsRes.status === 'fulfilled') {
         setForms(
-          (formsData.data || []).filter((f) => f.isActive).map((f) => ({ id: f.id, name: f.name }))
+          (formsRes.value.data || []).filter((f) => f.isActive).map((f) => ({ id: f.id, name: f.name }))
         );
-      } catch {
-        // ignore
       }
     };
     fetchOptions();

@@ -1,4 +1,4 @@
-export type Role = 'superusuario' | 'administrador' | 'manager' | 'tecnico_de_campo';
+export type Role = 'superusuario' | 'admin' | 'manager' | 'tecnico' | 'asistente';
 
 export type ReactivoState =
   | 'pendiente'

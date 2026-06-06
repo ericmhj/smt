@@ -12,6 +12,30 @@ export async function userRoutes(
   const userService = new UserService(opts.db);
 
   const adminRoles = requireRole(['superusuario', 'admin']);
+  const managerRoles = requireRole(['superusuario', 'admin', 'manager', 'asistente']);
+
+  // GET /api/users/tecnicos — list technicians (accessible to manager/asistente for ticket assignment)
+  fastify.get(
+    '/api/users/tecnicos',
+    { preHandler: [managerRoles] },
+    async (request, reply) => {
+      try {
+        const result = await userService.findAll({ role: 'tecnico', isActive: true, pageSize: 100 });
+        return reply.status(200).send(result);
+      } catch (error) {
+        if (error instanceof UserError) {
+          return reply.status(error.statusCode).send({
+            statusCode: error.statusCode,
+            code: error.code,
+            message: error.message,
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+        throw error;
+      }
+    },
+  );
 
   // POST /api/users — create user
   fastify.post(

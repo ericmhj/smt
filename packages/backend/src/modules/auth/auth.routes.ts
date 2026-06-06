@@ -28,6 +28,7 @@ export async function authRoutes(
       return reply.status(200).send({
         accessToken: tokenPair.accessToken,
         refreshToken: tokenPair.refreshToken,
+        user: tokenPair.user,
       });
     } catch (error) {
       if (error instanceof AuthError) {

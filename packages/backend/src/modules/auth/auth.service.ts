@@ -6,7 +6,7 @@ import type Redis from 'ioredis';
 import type { Database } from '../../db/index.js';
 import { users } from '../../db/schema/users.js';
 import { getRedisClient } from '../../lib/redis.js';
-import type { TokenPair, JWTPayload, LoginDTO } from './auth.types.js';
+import type { TokenPair, LoginResponse, JWTPayload, LoginDTO } from './auth.types.js';
 import { AuthErrorCode } from './auth.types.js';
 
 export class AuthError extends Error {
@@ -46,7 +46,7 @@ export class AuthService {
     this.publicKey = await importSPKI(this.config.publicKey, 'RS256');
   }
 
-  async login(credentials: LoginDTO): Promise<TokenPair> {
+  async login(credentials: LoginDTO): Promise<LoginResponse> {
     const { email, password } = credentials;
 
     // Find user by email
@@ -74,7 +74,17 @@ export class AuthService {
     }
 
     // Generate token pair
-    return this.generateTokenPair(user.id, user.role);
+    const tokenPair = await this.generateTokenPair(user.id, user.role);
+
+    return {
+      ...tokenPair,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    };
   }
 
   async refresh(refreshToken: string): Promise<TokenPair> {

@@ -72,8 +72,8 @@ export default function UsersPage() {
           <option value="superusuario">Superusuario</option>
           <option value="admin">Administrador</option>
           <option value="manager">Manager</option>
-          <option value="tecnico">Técnico de Campo</option>
-          <option value="tecnico_de_campo">Técnico de Campo</option>
+          <option value="tecnico">Técnico</option>
+          <option value="asistente">Asistente</option>
         </select>
 
         <select

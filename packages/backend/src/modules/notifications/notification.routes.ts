@@ -13,7 +13,7 @@ export async function notificationRoutes(
   opts: { db: Database },
 ): Promise<void> {
   const notificationService = new NotificationService(opts.db);
-  const allAuthenticated = requireRole(['superusuario', 'admin', 'manager', 'tecnico', 'tecnico_de_campo']);
+  const allAuthenticated = requireRole(['superusuario', 'admin', 'manager', 'tecnico', 'asistente']);
 
   // GET /api/notifications — list notifications for authenticated user
   fastify.get(

@@ -7,6 +7,8 @@ export interface KanbanCard {
   attemptNumber: number;
   state: ReactivoState;
   createdAt: string;
+  clienteNombre?: string;
+  fechaProgramada?: string;
   unreadObservations: number;
 }
 

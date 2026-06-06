@@ -12,7 +12,7 @@ export async function assignmentRoutes(
   const assignmentService = new AssignmentService(opts.db);
 
   const managerRoles = requireRole(['superusuario', 'admin', 'manager']);
-  const tecnicoRole = requireRole(['tecnico', 'tecnico_de_campo']);
+  const tecnicoRole = requireRole(['tecnico']);
 
   // POST /api/assignments — assign form to technician
   fastify.post(

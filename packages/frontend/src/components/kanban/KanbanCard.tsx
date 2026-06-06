@@ -8,6 +8,8 @@ export interface KanbanCardData {
   unreadObservations: number;
   createdAt: string;
   state: string;
+  clienteNombre?: string;
+  fechaProgramada?: string;
 }
 
 interface KanbanCardProps {
@@ -40,9 +42,18 @@ export default function KanbanCard({ card, draggable, onCardClick }: KanbanCardP
           <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 mt-1" />
         )}
       </div>
-      <p className="text-xs text-gray-500 mt-1">{card.tecnicoName}</p>
+      {card.clienteNombre && (
+        <p className="text-xs text-blue-600 mt-1 truncate">🏢 {card.clienteNombre}</p>
+      )}
+      <p className="text-xs text-gray-500 mt-1">👤 {card.tecnicoName}</p>
       <div className="flex items-center justify-between mt-2">
-        <span className="text-xs text-gray-400">Intento #{card.attemptNumber}</span>
+        {card.fechaProgramada ? (
+          <span className="text-xs text-orange-600">
+            📅 {new Date(card.fechaProgramada).toLocaleDateString('es')}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">Intento #{card.attemptNumber}</span>
+        )}
         <span className="text-xs text-gray-400">
           {new Date(card.createdAt).toLocaleDateString('es')}
         </span>

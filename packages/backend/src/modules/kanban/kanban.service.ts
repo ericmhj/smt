@@ -1,6 +1,7 @@
 import { eq, and, sql, gte, lte, type SQL } from 'drizzle-orm';
 import type { Database } from '../../db/index.js';
 import { reactivos, stateTransitions } from '../../db/schema/reactivos.js';
+import { tickets } from '../../db/schema/tickets.js';
 import { forms } from '../../db/schema/forms.js';
 import { users } from '../../db/schema/users.js';
 import { observations } from '../../db/schema/observations.js';
@@ -62,6 +63,8 @@ export class KanbanService {
         attemptNumber: reactivos.attemptNumber,
         state: reactivos.state,
         createdAt: reactivos.createdAt,
+        clienteNombre: reactivos.clienteNombre,
+        fechaProgramada: reactivos.fechaProgramada,
         unreadObservations: sql<number>`coalesce((
           select count(*)::int from observations
           where observations.reactivo_id = ${reactivos.id}
@@ -88,6 +91,8 @@ export class KanbanService {
           attemptNumber: r.attemptNumber,
           state: r.state as ReactivoState,
           createdAt: r.createdAt.toISOString(),
+          clienteNombre: r.clienteNombre || undefined,
+          fechaProgramada: r.fechaProgramada ? r.fechaProgramada.toISOString() : undefined,
           unreadObservations: r.unreadObservations,
         })),
     }));
@@ -189,6 +194,9 @@ export class KanbanService {
       `[Kanban] State transition: reactivo=${reactivoId} from=${fromState} to=${toState} actor=${actor.sub}`,
     );
 
+    // Hook: Sync reactivo state with associated ticket
+    await this.syncTicketState(reactivoId, toState);
+
     return {
       id: transition.id,
       reactivoId: transition.reactivoId,
@@ -199,6 +207,40 @@ export class KanbanService {
       reason: transition.reason,
       createdAt: transition.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * Sync: When a reactivo changes state via Kanban, update the associated ticket's state.
+   */
+  private async syncTicketState(reactivoId: string, newState: string): Promise<void> {
+    try {
+      const ticketResult = await this.db
+        .select({ id: tickets.id, estado: tickets.estado })
+        .from(tickets)
+        .where(eq(tickets.reactivoId, reactivoId))
+        .limit(1);
+
+      const ticket = ticketResult[0];
+      if (!ticket) return;
+
+      // Only sync if states differ
+      if (ticket.estado !== newState) {
+        await this.db
+          .update(tickets)
+          .set({ estado: newState, updatedAt: new Date() })
+          .where(eq(tickets.id, ticket.id));
+
+        console.log(
+          `[Kanban] Ticket ${ticket.id} synced to state '${newState}' from reactivo ${reactivoId}`,
+        );
+      }
+    } catch (error) {
+      // Non-critical: log and continue
+      console.error(
+        `[Kanban] Error syncing ticket state for reactivo ${reactivoId}:`,
+        error,
+      );
+    }
   }
 
   /**

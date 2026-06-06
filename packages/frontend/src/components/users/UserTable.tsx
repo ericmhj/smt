@@ -20,8 +20,7 @@ const roleLabels: Record<string, string> = {
   superusuario: 'Superusuario',
   admin: 'Administrador',
   manager: 'Manager',
-  tecnico: 'Técnico de Campo',
-  tecnico_de_campo: 'Técnico de Campo',
+  tecnico: 'Técnico',
 };
 
 export default function UserTable({ users, onToggleActive }: UserTableProps) {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const roleValues = ['superusuario', 'admin', 'manager', 'tecnico', 'tecnico_de_campo'] as const;
+const roleValues = ['superusuario', 'admin', 'manager', 'tecnico', 'asistente'] as const;
 
 export const createUserSchema = z.object({
   email: z.string().email('Email inválido'),

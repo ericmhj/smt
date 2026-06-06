@@ -11,3 +11,7 @@ export { observations, observationFiles } from './observations.js';
 export { notifications } from './notifications.js';
 
 export { auditLogs } from './audit.js';
+
+export { clientes, clienteContactos, clienteDocumentos } from './clientes.js';
+
+export { tickets, slaConfig, reglasAsignacion } from './tickets.js';
