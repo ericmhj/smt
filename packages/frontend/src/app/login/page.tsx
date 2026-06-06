@@ -36,7 +36,7 @@ function LoginForm() {
       <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-800">SGR</h1>
-          <p className="text-gray-500 text-sm mt-1">Sistema de Gestión de Reactivos</p>
+          <p className="text-gray-500 text-sm mt-1">Sistema de Gestión de Ensayos</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

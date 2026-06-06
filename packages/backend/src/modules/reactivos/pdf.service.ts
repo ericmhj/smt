@@ -198,9 +198,6 @@ export class PDFService {
       <span>Técnico: ${data.tecnicoName} (${data.tecnicoEmail})</span>
       <span>Fecha: ${date} | Intento #${data.attemptNumber}</span>
     </div>
-    <div class="pdf-meta">
-      <span>Estado: <span class="state-badge">${data.state}</span></span>
-    </div>
   </div>
 
   ${data.rejectionReason ? `

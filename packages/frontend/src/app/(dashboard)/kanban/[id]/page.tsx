@@ -74,7 +74,7 @@ export default function ReactivoDetailPage() {
   };
 
   if (loading) return <p className="text-gray-500">Cargando...</p>;
-  if (!reactivo) return <p className="text-red-500">Reactivo no encontrado.</p>;
+  if (!reactivo) return <p className="text-red-500">Ensayo no encontrado.</p>;
 
   // Calculate available transitions based on current state
   const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -90,7 +90,7 @@ export default function ReactivoDetailPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Detalle del reactivo</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Detalle del ensayo</h1>
         <div className="flex gap-2">
           {canTransition && (
             <button

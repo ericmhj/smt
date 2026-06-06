@@ -1,5 +1,7 @@
 'use client';
 
+import { stateLabels } from '@/lib/states';
+
 interface StateTransition {
   id: string;
   fromState: string;
@@ -13,14 +15,6 @@ interface StateTransition {
 interface StateHistoryProps {
   transitions: StateTransition[];
 }
-
-const stateLabels: Record<string, string> = {
-  pendiente: 'Pendiente',
-  en_revision: 'En revisión',
-  validado: 'Validado',
-  rechazado: 'Rechazado',
-  finalizado: 'Finalizado',
-};
 
 export default function StateHistory({ transitions }: StateHistoryProps) {
   return (

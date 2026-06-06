@@ -11,9 +11,10 @@ interface KanbanColumnProps {
   draggable?: boolean;
   onDragStart?: (cardId: string, currentState: string) => void;
   onDrop?: (cardId: string, fromState: string, toState: string) => void;
+  onCardClick?: (cardId: string) => void;
 }
 
-export default function KanbanColumn({ title, state, cards, color, draggable, onDragStart, onDrop }: KanbanColumnProps) {
+export default function KanbanColumn({ title, state, cards, color, draggable, onDragStart, onDrop, onCardClick }: KanbanColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   return (
@@ -49,11 +50,11 @@ export default function KanbanColumn({ title, state, cards, color, draggable, on
             key={card.id}
             card={{ ...card, state }}
             draggable={draggable}
-            onDragStart={onDragStart}
+            onCardClick={onCardClick}
           />
         ))}
         {cards.length === 0 && (
-          <p className="text-xs text-gray-400 text-center py-8">Sin reactivos</p>
+          <p className="text-xs text-gray-400 text-center py-8">Sin ensayos</p>
         )}
       </div>
     </div>

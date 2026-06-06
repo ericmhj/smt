@@ -102,6 +102,43 @@ export default function KanbanBoard() {
     }
   };
 
+  // PDF viewer state
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleCardClick = async (cardId: string) => {
+    if (pdfUrl) return; // Block if PDF already open
+
+    const confirmed = window.confirm('¿Desea abrir el PDF del ensayo?');
+    if (!confirmed) return;
+
+    setPdfLoading(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`http://localhost:3001/api/reactivos/${cardId}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        setPdfUrl(url);
+      } else {
+        alert('Error al obtener el PDF');
+      }
+    } catch {
+      alert('Error de conexión');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const closePdfViewer = () => {
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+      setPdfUrl(null);
+    }
+  };
+
   if (loading) return <p className="text-gray-500">Cargando tablero...</p>;
 
   return (
@@ -146,6 +183,7 @@ export default function KanbanBoard() {
               draggable={isManager}
               onDragStart={() => {}}
               onDrop={handleDrop}
+              onCardClick={handleCardClick}
             />
           );
         })}
@@ -159,6 +197,38 @@ export default function KanbanBoard() {
           onCancel={() => setShowTransition(false)}
           loading={transitioning}
         />
+      )}
+
+      {/* PDF Loading overlay */}
+      {pdfLoading && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+            <p className="text-white font-medium">Cargando PDF...</p>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Viewer Frame */}
+      {pdfUrl && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-2xl w-[90vw] h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <h3 className="text-sm font-semibold text-gray-700">Visor de PDF</h3>
+              <button
+                onClick={closePdfViewer}
+                className="px-3 py-1 bg-red-50 text-red-600 rounded-md hover:bg-red-100 text-sm font-medium"
+              >
+                Cerrar PDF
+              </button>
+            </div>
+            <iframe
+              src={pdfUrl}
+              className="flex-1 w-full"
+              title="PDF del ensayo"
+            />
+          </div>
+        </div>
       )}
     </div>
   );

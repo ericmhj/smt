@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { stateLabels } from '@/lib/states';
 
 interface Attempt {
   id: string;
@@ -13,14 +14,6 @@ interface AttemptChainProps {
   attempts: Attempt[];
   currentId: string;
 }
-
-const stateLabels: Record<string, string> = {
-  pendiente: 'Pendiente',
-  en_revision: 'En revisión',
-  validado: 'Validado',
-  rechazado: 'Rechazado',
-  finalizado: 'Finalizado',
-};
 
 export default function AttemptChain({ attempts, currentId }: AttemptChainProps) {
   return (

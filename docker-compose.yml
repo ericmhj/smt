@@ -1,16 +1,4 @@
-version: "3.9"
-
-# =============================================================================
-# SGR - Sistema de Gestión de Reactivos
-# Un solo comando: docker compose up --build
-# =============================================================================
-
 services:
-  # ---------------------------------------------------------------------------
-  # BACKEND (Fastify + TypeScript)
-  # Puerto: 3001
-  # Depende de: postgres, redis, minio, clamav
-  # ---------------------------------------------------------------------------
   backend:
     build:
       context: .
@@ -25,11 +13,12 @@ services:
       FRONTEND_URL: http://localhost:3000
       DATABASE_URL: postgresql://sgr:sgr_dev_password@postgres:5432/sgr_dev
       REDIS_URL: redis://:sgr_redis_dev@redis:6379
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: sgr_minio_dev
-      MINIO_SECRET_KEY: sgr_minio_dev_password
+      MINIO_ENDPOINT: http://garage:3900
+      MINIO_ACCESS_KEY: GKed5537444c2e84eb01b9fa34
+      MINIO_SECRET_KEY: 85dc8299f8dfde6f3ca5549fd3380c799df0c123936bd37795a5d1eb04f55246
       MINIO_BUCKET: sgr-files
       MINIO_USE_SSL: "false"
+      MINIO_REGION: garage
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
       CLAMAV_TIMEOUT: "30000"
@@ -48,8 +37,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
+      garage-init:
+        condition: service_completed_successfully
       jwt-keygen:
         condition: service_completed_successfully
     healthcheck:
@@ -61,11 +50,6 @@ services:
     networks:
       - sgr-network
 
-  # ---------------------------------------------------------------------------
-  # FRONTEND (Next.js)
-  # Puerto: 3000
-  # Depende de: backend
-  # ---------------------------------------------------------------------------
   frontend:
     build:
       context: .
@@ -90,10 +74,6 @@ services:
       start_period: 30s
     networks:
       - sgr-network
-
-  # ---------------------------------------------------------------------------
-  # INFRAESTRUCTURA
-  # ---------------------------------------------------------------------------
 
   postgres:
     image: postgres:16-alpine
@@ -133,24 +113,28 @@ services:
     networks:
       - sgr-network
 
-  minio:
-    image: minio/minio:latest
-    container_name: sgr-minio
+  garage:
+    image: dxflrs/garage:v1.0.1
+    container_name: sgr-garage
     restart: unless-stopped
     ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: sgr_minio_dev
-      MINIO_ROOT_PASSWORD: sgr_minio_dev_password
-    command: server /data --console-address ":9001"
+      - "3900:3900"
+      - "3903:3903"
     volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+      - ./config/garage.toml:/etc/garage.toml:ro
+    networks:
+      - sgr-network
+
+  garage-init:
+    image: alpine:3.19
+    container_name: sgr-garage-init
+    depends_on:
+      - garage
+    volumes:
+      - ./config/garage-init.sh:/init.sh:ro
+    entrypoint: ["sh", "/init.sh"]
     networks:
       - sgr-network
 
@@ -171,21 +155,16 @@ services:
     networks:
       - sgr-network
 
-  # ---------------------------------------------------------------------------
-  # UTILIDADES (se ejecutan una vez y terminan)
-  # ---------------------------------------------------------------------------
-
-  # Genera claves JWT automáticamente si no existen
   jwt-keygen:
     image: alpine:3.19
     container_name: sgr-jwt-keygen
-    command: |
+    command: >
       sh -c '
         if [ ! -f /keys/private.pem ]; then
-          apk add --no-cache openssl
-          openssl genrsa -out /keys/private.pem 2048
-          openssl rsa -in /keys/private.pem -pubout -out /keys/public.pem
-          chmod 644 /keys/*.pem
+          apk add --no-cache openssl &&
+          openssl genrsa -out /keys/private.pem 2048 &&
+          openssl rsa -in /keys/private.pem -pubout -out /keys/public.pem &&
+          chmod 644 /keys/*.pem &&
           echo "JWT keys generated."
         else
           echo "JWT keys already exist, skipping."
@@ -196,26 +175,11 @@ services:
     networks:
       - sgr-network
 
-  # Crea el bucket de MinIO automáticamente
-  minio-setup:
-    image: minio/mc:latest
-    container_name: sgr-minio-setup
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: |
-      sh -c '
-        mc alias set sgr http://minio:9000 sgr_minio_dev sgr_minio_dev_password
-        mc mb sgr/sgr-files --ignore-existing
-        echo "MinIO bucket sgr-files ready."
-      '
-    networks:
-      - sgr-network
-
 volumes:
   postgres_data:
   redis_data:
-  minio_data:
+  garage_meta:
+  garage_data:
   clamav_data:
   jwt_keys:
 

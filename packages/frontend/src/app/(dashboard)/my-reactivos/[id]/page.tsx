@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
+import { stateLabels, stateColors } from '@/lib/states';
+
 interface ReactivoDetail {
   id: string;
   formId: string;
@@ -24,22 +26,6 @@ interface ReactivoDetail {
     createdAt: string;
   }>;
 }
-
-const stateLabels: Record<string, string> = {
-  pendiente: 'Pendiente',
-  en_revision: 'En revisión',
-  validado: 'Validado',
-  rechazado: 'Rechazado',
-  finalizado: 'Finalizado',
-};
-
-const stateColors: Record<string, string> = {
-  pendiente: 'bg-yellow-100 text-yellow-800',
-  en_revision: 'bg-blue-100 text-blue-800',
-  validado: 'bg-green-100 text-green-800',
-  rechazado: 'bg-red-100 text-red-800',
-  finalizado: 'bg-gray-100 text-gray-800',
-};
 
 export default function ReactivoDetailPage() {
   const params = useParams();
@@ -62,12 +48,12 @@ export default function ReactivoDetailPage() {
   }, [params.id]);
 
   if (loading) return <p className="text-gray-500">Cargando...</p>;
-  if (!reactivo) return <p className="text-red-500">Reactivo no encontrado.</p>;
+  if (!reactivo) return <p className="text-red-500">Ensayo no encontrado.</p>;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Detalle del Reactivo</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Detalle del Ensayo</h1>
         <button
           onClick={() => router.push('/my-reactivos')}
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm"

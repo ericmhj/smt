@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { api, apiUpload } from '@/lib/api';
+import { stateLabels } from '@/lib/states';
 import SignatureCanvas from '@/components/signature/SignatureCanvas';
 import SignatureUpload from '@/components/signature/SignatureUpload';
 
@@ -12,14 +13,6 @@ interface TransitionDialogProps {
   onCancel: () => void;
   loading?: boolean;
 }
-
-const stateLabels: Record<string, string> = {
-  pendiente: 'Pendiente',
-  en_revision: 'En revisión',
-  validado: 'Validado',
-  rechazado: 'Rechazado',
-  finalizado: 'Finalizado',
-};
 
 export default function TransitionDialog({
   currentState,
@@ -65,7 +58,18 @@ export default function TransitionDialog({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 p-6 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 p-6 max-h-[90vh] overflow-y-auto relative">
+        {/* Loading overlay */}
+        {(loading || uploading) && (
+          <div className="absolute inset-0 bg-white/90 flex items-center justify-center z-10 rounded-lg">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+              <p className="text-sm font-medium text-gray-600">
+                {uploading ? 'Subiendo firma...' : 'Procesando transición...'}
+              </p>
+            </div>
+          </div>
+        )}
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Transición de estado</h2>
 
         <div className="space-y-4">

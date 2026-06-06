@@ -7,13 +7,13 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const s3Client = new S3Client({
-  endpoint: process.env.MINIO_ENDPOINT || 'http://localhost:9000',
-  region: process.env.MINIO_REGION || 'us-east-1',
+  endpoint: process.env.MINIO_ENDPOINT || 'http://localhost:3900',
+  region: process.env.MINIO_REGION || 'garage',
   credentials: {
     accessKeyId: process.env.MINIO_ACCESS_KEY || 'minioadmin',
     secretAccessKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
   },
-  forcePathStyle: true, // Required for MinIO
+  forcePathStyle: true, // Required for S3-compatible storage
 });
 
 const BUCKET = process.env.MINIO_BUCKET || 'sgr-files';

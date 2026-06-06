@@ -1,5 +1,6 @@
 'use client';
 
+import { stateLabels } from '@/lib/states';
 import StateHistory from './StateHistory';
 import AttemptChain from './AttemptChain';
 
@@ -29,14 +30,6 @@ interface ReactivoDetailProps {
     }>;
   };
 }
-
-const stateLabels: Record<string, string> = {
-  pendiente: 'Pendiente',
-  en_revision: 'En revisión',
-  validado: 'Validado',
-  rechazado: 'Rechazado',
-  finalizado: 'Finalizado',
-};
 
 export default function ReactivoDetail({ reactivo }: ReactivoDetailProps) {
   return (

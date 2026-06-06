@@ -11,12 +11,12 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Tablero Kanban', href: '/kanban', roles: ['superusuario', 'admin', 'manager'] },
+  { label: 'Estado de los Ensayos', href: '/kanban', roles: ['superusuario', 'admin', 'manager'] },
   { label: 'Usuarios', href: '/users', roles: ['superusuario', 'admin'] },
   { label: 'Formularios', href: '/forms', roles: ['superusuario', 'admin', 'manager'] },
   { label: 'Asignaciones', href: '/assignments', roles: ['superusuario', 'admin', 'manager'] },
   { label: 'Mis Formularios', href: '/my-forms', roles: ['tecnico', 'tecnico_de_campo'] },
-  { label: 'Mis Reactivos', href: '/my-reactivos', roles: ['tecnico', 'tecnico_de_campo'] },
+  { label: 'Mis Ensayos', href: '/my-reactivos', roles: ['tecnico', 'tecnico_de_campo'] },
 ];
 
 export default function Sidebar() {
@@ -31,7 +31,11 @@ export default function Sidebar() {
     <aside className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
       <div className="mb-8">
         <h1 className="text-xl font-bold text-gray-800">SGR</h1>
-        <p className="text-xs text-gray-500">Sistema de Gestión de Reactivos</p>
+        <p className="text-xs text-gray-500">Sistema de Gestión de Ensayos</p>
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <p className="text-sm font-medium text-gray-700 truncate">{user.email}</p>
+          <p className="text-xs text-gray-500 capitalize">{user.role === 'tecnico' ? 'Técnico de Campo' : user.role === 'admin' ? 'Administrador' : user.role}</p>
+        </div>
       </div>
       <nav className="space-y-1">
         {visibleItems.map((item) => {

@@ -13,6 +13,7 @@ import { authRoutes } from './modules/auth/auth.routes.js';
 import { userRoutes } from './modules/users/user.routes.js';
 import { formRoutes } from './modules/forms/form.routes.js';
 import { assignmentRoutes } from './modules/assignments/assignment.routes.js';
+import { catalogRoutes } from './modules/catalogs/catalog.routes.js';
 import { reactivoRoutes } from './modules/reactivos/reactivo.routes.js';
 import { kanbanRoutes } from './modules/kanban/kanban.routes.js';
 import { signatureRoutes } from './modules/signatures/signature.routes.js';
@@ -94,6 +95,9 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Register audit routes
   await app.register(auditRoutes, { db });
+
+  // Register catalog routes
+  await app.register(catalogRoutes, { db });
 
   return app;
 }

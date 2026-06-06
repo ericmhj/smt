@@ -29,7 +29,7 @@ export default function MyReactivosPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Mis Reactivos</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">Mis Ensayos</h1>
 
       <div className="mb-4">
         <select
@@ -38,8 +38,8 @@ export default function MyReactivosPage() {
           className="px-3 py-2 border border-gray-300 rounded-md text-sm"
         >
           <option value="">Todos los estados</option>
-          <option value="pendiente">Pendiente</option>
-          <option value="en_revision">En revisión</option>
+          <option value="pendiente">Programado</option>
+          <option value="en_revision">En Evaluación</option>
           <option value="validado">Validado</option>
           <option value="rechazado">Rechazado</option>
           <option value="finalizado">Finalizado</option>

@@ -6,7 +6,6 @@ import {
   jsonb,
   timestamp,
 } from 'drizzle-orm/pg-core';
-import { reactivoStateEnum } from './enums.js';
 import { users } from './users.js';
 import { forms, formVersions } from './forms.js';
 import { signatures } from './signatures.js';
@@ -26,7 +25,7 @@ export const reactivos = pgTable('reactivos', {
     (): any => reactivos.id,
   ),
   attemptNumber: integer('attempt_number').notNull().default(1),
-  state: reactivoStateEnum('state').notNull().default('pendiente'),
+  state: varchar('state', { length: 50 }).notNull().default('pendiente'),
   responses: jsonb('responses').notNull(),
   rejectionReason: varchar('rejection_reason', { length: 1000 }),
   createdAt: timestamp('created_at', { withTimezone: true })
@@ -42,8 +41,8 @@ export const stateTransitions = pgTable('state_transitions', {
   reactivoId: uuid('reactivo_id')
     .notNull()
     .references(() => reactivos.id),
-  fromState: reactivoStateEnum('from_state').notNull(),
-  toState: reactivoStateEnum('to_state').notNull(),
+  fromState: varchar('from_state', { length: 50 }).notNull(),
+  toState: varchar('to_state', { length: 50 }).notNull(),
   actorId: uuid('actor_id')
     .notNull()
     .references(() => users.id),

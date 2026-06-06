@@ -1,7 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-
 export interface KanbanCardData {
   id: string;
   tecnicoName: string;
@@ -15,11 +13,10 @@ export interface KanbanCardData {
 interface KanbanCardProps {
   card: KanbanCardData;
   draggable?: boolean;
+  onCardClick?: (cardId: string) => void;
 }
 
-export default function KanbanCard({ card, draggable }: KanbanCardProps) {
-  const router = useRouter();
-
+export default function KanbanCard({ card, draggable, onCardClick }: KanbanCardProps) {
   return (
     <div
       draggable={draggable || false}
@@ -28,7 +25,11 @@ export default function KanbanCard({ card, draggable }: KanbanCardProps) {
         e.dataTransfer.setData('fromState', card.state);
         e.dataTransfer.effectAllowed = 'move';
       }}
-      onClick={() => router.push(`/kanban/${card.id}`)}
+      onClick={(e) => {
+        // Don't trigger click if dragging
+        if (e.defaultPrevented) return;
+        onCardClick?.(card.id);
+      }}
       className={`bg-white rounded-md shadow-sm border border-gray-200 p-3 hover:shadow-md transition-shadow select-none ${
         draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
       }`}
