@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import KanbanColumn from '@/components/kanban/KanbanColumn';
 import { KanbanCardData } from '@/components/kanban/KanbanCard';
+import EnsayoFormModal from '@/components/kanban/EnsayoFormModal';
+import RejectionInfoModal from '@/components/kanban/RejectionInfoModal';
+import Toast from '@/components/ui/Toast';
 
 interface KanbanColumnData {
   state: string;
@@ -15,6 +18,23 @@ interface KanbanColumnData {
 interface KanbanResponse {
   columns: KanbanColumnData[];
 }
+
+interface ReactivoDetail {
+  id: string;
+  formName?: string;
+  responses: Record<string, unknown>;
+  rejectionReason: string | null;
+  state: string;
+  form?: { name: string };
+}
+
+interface FormData {
+  sanitizedHtml: string;
+  jsonSchema: unknown;
+  fieldsMetadata: unknown;
+}
+
+type ActiveModal = 'none' | 'ensayo' | 'rejection' | 'pdf';
 
 const columnsConfig = [
   { key: 'pendiente', title: 'Programado', color: '#eab308' },
@@ -29,58 +49,157 @@ export default function MyKanbanPage() {
   const [data, setData] = useState<KanbanColumnData[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Modal state
+  const [activeModal, setActiveModal] = useState<ActiveModal>('none');
+  const [activeReactivoId, setActiveReactivoId] = useState<string | null>(null);
+
+  // EnsayoFormModal state
+  const [formHtml, setFormHtml] = useState<string>('');
+  const [formInitialResponses, setFormInitialResponses] = useState<Record<string, unknown> | undefined>(undefined);
+
+  // RejectionInfoModal state
+  const [rejectionReason, setRejectionReason] = useState<string>('');
+  const [rejectionFormName, setRejectionFormName] = useState<string>('');
+  const [rejectionResponses, setRejectionResponses] = useState<Record<string, unknown>>({});
+
   // PDF viewer state
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
 
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const fetchKanban = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const result = await api<KanbanResponse>(`/api/kanban?tecnicoId=${user.id}`);
+      setData(result.columns || []);
+    } catch {
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!user || authLoading) return;
-    const fetchKanban = async () => {
-      setLoading(true);
-      try {
-        const result = await api<KanbanResponse>(`/api/kanban?tecnicoId=${user.id}`);
-        setData(result.columns || []);
-      } catch {
-        setData([]);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchKanban();
-  }, [user, authLoading]);
+  }, [user, authLoading, fetchKanban]);
 
   if (authLoading || !user) return <p className="text-gray-500">Cargando...</p>;
 
   const handleCardClick = async (cardId: string) => {
-    if (pdfUrl) return;
+    if (activeModal !== 'none' || pdfUrl) return;
 
-    const confirmed = window.confirm('¿Desea abrir el PDF del ensayo?');
-    if (!confirmed) return;
-
-    setPdfLoading(true);
-    try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://localhost:3001/api/reactivos/${cardId}/pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        setPdfUrl(url);
-      } else {
-        alert('Error al obtener el PDF');
+    // Find the card to determine its state
+    let cardState: string | null = null;
+    for (const col of data) {
+      const card = col.cards.find((c) => c.id === cardId);
+      if (card) {
+        cardState = card.state;
+        break;
       }
-    } catch {
-      alert('Error de conexión');
-    } finally {
-      setPdfLoading(false);
     }
+
+    if (!cardState) return;
+
+    if (cardState === 'pendiente') {
+      // Fetch form data and open EnsayoFormModal
+      setPdfLoading(true);
+      try {
+        const [formData, detail] = await Promise.all([
+          api<FormData>(`/api/reactivos/${cardId}/form`),
+          api<ReactivoDetail>(`/api/reactivos/${cardId}`),
+        ]);
+        setFormHtml(formData.sanitizedHtml);
+        setFormInitialResponses(
+          detail.responses && Object.keys(detail.responses).length > 0
+            ? detail.responses
+            : undefined,
+        );
+        setActiveReactivoId(cardId);
+        setActiveModal('ensayo');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Error de conexión';
+        setToast({ message, type: 'error' });
+      } finally {
+        setPdfLoading(false);
+      }
+    } else if (cardState === 'rechazado') {
+      // Fetch detail and open RejectionInfoModal
+      setPdfLoading(true);
+      try {
+        const detail = await api<ReactivoDetail>(`/api/reactivos/${cardId}`);
+        setRejectionReason(detail.rejectionReason || '');
+        setRejectionFormName(detail.form?.name || detail.formName || '');
+        setRejectionResponses(detail.responses || {});
+        setActiveReactivoId(cardId);
+        setActiveModal('rejection');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Error de conexión';
+        setToast({ message, type: 'error' });
+      } finally {
+        setPdfLoading(false);
+      }
+    } else {
+      // Other states: open PDF viewer
+      setPdfLoading(true);
+      try {
+        const token = localStorage.getItem('access_token');
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/reactivos/${cardId}/pdf`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          setPdfUrl(url);
+          setActiveModal('pdf');
+        } else {
+          setToast({ message: 'Error al obtener el PDF', type: 'error' });
+        }
+      } catch {
+        setToast({ message: 'Error de conexión', type: 'error' });
+      } finally {
+        setPdfLoading(false);
+      }
+    }
+  };
+
+  const closeModal = () => {
+    setActiveModal('none');
+    setActiveReactivoId(null);
+    setFormHtml('');
+    setFormInitialResponses(undefined);
   };
 
   const closePdfViewer = () => {
     if (pdfUrl) {
       URL.revokeObjectURL(pdfUrl);
       setPdfUrl(null);
+    }
+    setActiveModal('none');
+  };
+
+  const handleSubmitSuccess = () => {
+    closeModal();
+    setToast({ message: 'Ensayo enviado exitosamente', type: 'success' });
+    fetchKanban();
+  };
+
+  const handleReapplySuccess = async (newReactivoId: string, responses: Record<string, unknown>) => {
+    // After reapply, open EnsayoFormModal for the new reactivo, pre-filled
+    try {
+      const formData = await api<FormData>(`/api/reactivos/${newReactivoId}/form`);
+      setFormHtml(formData.sanitizedHtml);
+      setFormInitialResponses(responses);
+      setActiveReactivoId(newReactivoId);
+      setActiveModal('ensayo');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error de conexión';
+      setToast({ message, type: 'error' });
+      closeModal();
     }
   };
 
@@ -118,18 +237,41 @@ export default function MyKanbanPage() {
         })}
       </div>
 
-      {/* PDF Loading overlay */}
+      {/* Loading overlay */}
       {pdfLoading && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="flex flex-col items-center gap-3">
             <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-            <p className="text-white font-medium">Cargando PDF...</p>
+            <p className="text-white font-medium">Cargando...</p>
           </div>
         </div>
       )}
 
+      {/* EnsayoFormModal */}
+      {activeModal === 'ensayo' && activeReactivoId && (
+        <EnsayoFormModal
+          reactivoId={activeReactivoId}
+          htmlContent={formHtml}
+          initialResponses={formInitialResponses}
+          onClose={closeModal}
+          onSubmitSuccess={handleSubmitSuccess}
+        />
+      )}
+
+      {/* RejectionInfoModal */}
+      {activeModal === 'rejection' && activeReactivoId && (
+        <RejectionInfoModal
+          reactivoId={activeReactivoId}
+          rejectionReason={rejectionReason}
+          formName={rejectionFormName}
+          responses={rejectionResponses}
+          onClose={closeModal}
+          onReapplySuccess={handleReapplySuccess}
+        />
+      )}
+
       {/* PDF Viewer Frame */}
-      {pdfUrl && (
+      {activeModal === 'pdf' && pdfUrl && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-2xl w-[90vw] h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-4 py-3 border-b">
@@ -148,6 +290,15 @@ export default function MyKanbanPage() {
             />
           </div>
         </div>
+      )}
+
+      {/* Toast notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );

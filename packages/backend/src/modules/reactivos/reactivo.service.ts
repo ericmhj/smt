@@ -2,6 +2,7 @@ import { eq, and, desc, sql, type SQL } from 'drizzle-orm';
 import type { Database } from '../../db/index.js';
 import { reactivos, stateTransitions } from '../../db/schema/reactivos.js';
 import { forms, formVersions, formAssignments } from '../../db/schema/forms.js';
+import { tickets } from '../../db/schema/tickets.js';
 import { users } from '../../db/schema/users.js';
 import { ReactivoError, ReactivoErrorCode } from './reactivo.errors.js';
 import { validateResponses } from './schema-validator.js';
@@ -252,6 +253,181 @@ export class ReactivoService {
     const reactivo = result[0]!;
 
     return toReactivoResponse(reactivo);
+  }
+
+  /**
+   * Submit the ensayo form for a reactivo in state 'pendiente'.
+   * Validates role, ownership, state, schema, persists responses,
+   * transitions state to 'en_revision', and syncs ticket.
+   */
+  async submit(
+    reactivoId: string,
+    responses: Record<string, unknown>,
+    actor: JWTPayload,
+  ): Promise<ReactivoResponse> {
+    // 1. Verify that actor has role 'tecnico'
+    if (actor.role !== 'tecnico') {
+      throw new ReactivoError(
+        403,
+        ReactivoErrorCode.UNAUTHORIZED_ROLE,
+        'Solo el técnico puede enviar ensayos',
+      );
+    }
+
+    // 2. Get reactivo by id
+    const reactivoResult = await this.db
+      .select()
+      .from(reactivos)
+      .where(eq(reactivos.id, reactivoId))
+      .limit(1);
+
+    const reactivo = reactivoResult[0];
+    if (!reactivo) {
+      throw new ReactivoError(
+        404,
+        ReactivoErrorCode.REACTIVO_NOT_FOUND,
+        'Reactivo no encontrado',
+      );
+    }
+
+    // 3. Verify ownership
+    if (reactivo.tecnicoId !== actor.sub) {
+      throw new ReactivoError(
+        403,
+        ReactivoErrorCode.NOT_OWNER,
+        'Solo el técnico asignado puede enviar este ensayo',
+      );
+    }
+
+    // 4. Verify state is 'pendiente'
+    if (reactivo.state !== 'pendiente') {
+      throw new ReactivoError(
+        403,
+        ReactivoErrorCode.INVALID_STATE_FOR_SUBMIT,
+        'El ensayo no es editable en su estado actual',
+      );
+    }
+
+    // 5. Get form_version by reactivo.formVersionId
+    const versionResult = await this.db
+      .select()
+      .from(formVersions)
+      .where(eq(formVersions.id, reactivo.formVersionId))
+      .limit(1);
+
+    const version = versionResult[0];
+    if (!version) {
+      throw new ReactivoError(
+        404,
+        ReactivoErrorCode.VERSION_NOT_FOUND,
+        'Versión del formulario no encontrada',
+      );
+    }
+
+    // 6. Validate responses against JSON schema
+    const validation = validateResponses(responses, version.jsonSchema);
+    if (!validation.valid) {
+      throw new ReactivoError(
+        400,
+        ReactivoErrorCode.INVALID_RESPONSES,
+        `Respuestas inválidas: ${validation.errors.join(', ')}`,
+      );
+    }
+
+    // 7. Update reactivo: responses + state='en_revision'
+    const updateResult = await this.db
+      .update(reactivos)
+      .set({
+        responses,
+        state: 'en_revision',
+        updatedAt: new Date(),
+      })
+      .where(eq(reactivos.id, reactivoId))
+      .returning();
+
+    const updatedReactivo = updateResult[0]!;
+
+    // 8. Sync ticket state
+    await this.syncTicketState(reactivoId, 'en_revision');
+
+    return toReactivoResponse(updatedReactivo);
+  }
+
+  /**
+   * Sync ticket state when a reactivo changes state.
+   */
+  private async syncTicketState(reactivoId: string, newState: string): Promise<void> {
+    try {
+      const ticketResult = await this.db
+        .select({ id: tickets.id, estado: tickets.estado })
+        .from(tickets)
+        .where(eq(tickets.reactivoId, reactivoId))
+        .limit(1);
+
+      const ticket = ticketResult[0];
+      if (!ticket) return;
+
+      if (ticket.estado !== newState) {
+        await this.db
+          .update(tickets)
+          .set({ estado: newState, updatedAt: new Date() })
+          .where(eq(tickets.id, ticket.id));
+      }
+    } catch (error) {
+      console.error(
+        `[ReactivoService] Error syncing ticket state for reactivo ${reactivoId}:`,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Get the form version data (sanitizedHtml, jsonSchema, fieldsMetadata) for a reactivo.
+   */
+  async getFormData(reactivoId: string): Promise<{
+    sanitizedHtml: string;
+    jsonSchema: unknown;
+    fieldsMetadata: unknown;
+  }> {
+    const reactivoResult = await this.db
+      .select({ formVersionId: reactivos.formVersionId })
+      .from(reactivos)
+      .where(eq(reactivos.id, reactivoId))
+      .limit(1);
+
+    const rvResult = reactivoResult[0];
+    if (!rvResult) {
+      throw new ReactivoError(
+        404,
+        ReactivoErrorCode.REACTIVO_NOT_FOUND,
+        'Reactivo no encontrado',
+      );
+    }
+
+    const fvResult = await this.db
+      .select({
+        sanitizedHtml: formVersions.sanitizedHtml,
+        jsonSchema: formVersions.jsonSchema,
+        fieldsMetadata: formVersions.fieldsMetadata,
+      })
+      .from(formVersions)
+      .where(eq(formVersions.id, rvResult.formVersionId))
+      .limit(1);
+
+    const fv = fvResult[0];
+    if (!fv) {
+      throw new ReactivoError(
+        404,
+        ReactivoErrorCode.VERSION_NOT_FOUND,
+        'Versión del formulario no encontrada',
+      );
+    }
+
+    return {
+      sanitizedHtml: fv.sanitizedHtml,
+      jsonSchema: fv.jsonSchema,
+      fieldsMetadata: fv.fieldsMetadata,
+    };
   }
 
   /**

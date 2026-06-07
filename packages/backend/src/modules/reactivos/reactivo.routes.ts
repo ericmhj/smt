@@ -6,6 +6,7 @@ import { requireRole } from '../users/rbac.middleware.js';
 import {
   createReactivoSchema,
   reapplyReactivoSchema,
+  submitReactivoSchema,
   reactivoIdParamSchema,
   myReactivosQuerySchema,
 } from './reactivo.schemas.js';
@@ -97,6 +98,92 @@ export async function reactivoRoutes(
           request.user,
         );
         return reply.status(201).send(reactivo);
+      } catch (error) {
+        if (error instanceof ReactivoError) {
+          return reply.status(error.statusCode).send({
+            statusCode: error.statusCode,
+            code: error.code,
+            message: error.message,
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // POST /api/reactivos/:id/submit — submit ensayo form (requireRole: tecnico)
+  fastify.post(
+    '/api/reactivos/:id/submit',
+    { preHandler: [tecnicoRole] },
+    async (request, reply) => {
+      const paramResult = reactivoIdParamSchema.safeParse(request.params);
+      if (!paramResult.success) {
+        return reply.status(400).send({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Parámetro inválido',
+          details: paramResult.error.flatten().fieldErrors,
+          timestamp: new Date().toISOString(),
+          requestId: request.id,
+        });
+      }
+
+      const bodyResult = submitReactivoSchema.safeParse(request.body);
+      if (!bodyResult.success) {
+        return reply.status(400).send({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Datos de entrada inválidos',
+          details: bodyResult.error.flatten().fieldErrors,
+          timestamp: new Date().toISOString(),
+          requestId: request.id,
+        });
+      }
+
+      try {
+        const reactivo = await reactivoService.submit(
+          paramResult.data.id,
+          bodyResult.data.responses,
+          request.user,
+        );
+        return reply.status(200).send(reactivo);
+      } catch (error) {
+        if (error instanceof ReactivoError) {
+          return reply.status(error.statusCode).send({
+            statusCode: error.statusCode,
+            code: error.code,
+            message: error.message,
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // GET /api/reactivos/:id/form — get form HTML and schema for a reactivo (requireRole: tecnico)
+  fastify.get(
+    '/api/reactivos/:id/form',
+    { preHandler: [tecnicoRole] },
+    async (request, reply) => {
+      const paramResult = reactivoIdParamSchema.safeParse(request.params);
+      if (!paramResult.success) {
+        return reply.status(400).send({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Parámetro inválido',
+          details: paramResult.error.flatten().fieldErrors,
+          timestamp: new Date().toISOString(),
+          requestId: request.id,
+        });
+      }
+
+      try {
+        const formData = await reactivoService.getFormData(paramResult.data.id);
+        return reply.status(200).send(formData);
       } catch (error) {
         if (error instanceof ReactivoError) {
           return reply.status(error.statusCode).send({

@@ -9,6 +9,10 @@ export const reapplyReactivoSchema = z.object({
   responses: z.record(z.string(), z.unknown()),
 });
 
+export const submitReactivoSchema = z.object({
+  responses: z.record(z.string(), z.unknown()),
+});
+
 export const reactivoIdParamSchema = z.object({
   id: z.string().uuid('id debe ser un UUID válido'),
 });
