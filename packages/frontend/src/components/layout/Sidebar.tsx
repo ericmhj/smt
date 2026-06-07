@@ -28,7 +28,7 @@ const navItems: NavItem[] = [
     ],
   },
   { label: 'Mis Formularios', href: '/my-forms', roles: ['tecnico'] },
-  { label: 'Mis Ensayos', href: '/my-reactivos', roles: ['tecnico'] },
+  { label: 'Mis Ensayos', href: '/my-kanban', roles: ['tecnico'] },
 ];
 
 export default function Sidebar() {

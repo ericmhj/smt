@@ -9,7 +9,7 @@ const routePermissions: Record<string, Role[]> = {
   '/tickets': ['manager', 'asistente'],
   '/configuracion': ['manager'],
   '/my-forms': ['tecnico'],
-  '/my-reactivos': ['tecnico'],
+  '/my-kanban': ['tecnico'],
 };
 
 export function canAccessRoute(role: Role, pathname: string): boolean {

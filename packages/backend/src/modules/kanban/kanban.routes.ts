@@ -16,7 +16,7 @@ export async function kanbanRoutes(
 ): Promise<void> {
   const kanbanService = new KanbanService(opts.db);
 
-  const viewRole = requireRole(['superusuario', 'admin', 'manager']);
+  const viewRole = requireRole(['superusuario', 'admin', 'manager', 'tecnico']);
   const managerOnly = requireRole(['manager']);
 
   // GET /api/kanban — get board (requireRole: superusuario, admin, manager)
