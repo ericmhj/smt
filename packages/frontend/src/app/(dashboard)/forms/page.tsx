@@ -62,12 +62,14 @@ export default function FormsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Formularios</h1>
-        <Link
-          href="/forms/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
-          Nuevo formulario
-        </Link>
+        {user && (user.role === 'superusuario' || user.role === 'admin') && (
+          <Link
+            href="/forms/new"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Nuevo formulario
+          </Link>
+        )}
       </div>
 
       {loading ? (

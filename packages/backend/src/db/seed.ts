@@ -1,7 +1,13 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import bcrypt from 'bcrypt';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import * as schema from './schema/index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -228,6 +234,118 @@ async function seed() {
 
     console.log('✅ Form assignments created/verified');
   }
+
+  // --- Formulario NOM-025-STPS-2008 ---
+  const [formNom025] = await db
+    .insert(schema.forms)
+    .values({
+      name: 'Ensayo NOM-025-STPS-2008 Iluminación',
+      slug: 'ensayo-nom025-iluminacion',
+      isActive: true,
+      createdBy: su.id,
+      currentVersion: 1,
+    })
+    .onConflictDoNothing({ target: schema.forms.slug })
+    .returning();
+
+  const allFormsAfter = await db.select().from(schema.forms);
+  const fNom025 = formNom025 || allFormsAfter.find(f => f.slug === 'ensayo-nom025-iluminacion');
+
+  if (fNom025 && formNom025) {
+    // Read HTML from file
+    const nom025Html = readFileSync(join(__dirname, 'seed-data', 'formulario-nom025.html'), 'utf-8');
+
+    await db.insert(schema.formVersions).values({
+      formId: fNom025.id,
+      versionNumber: 1,
+      htmlContent: nom025Html,
+      sanitizedHtml: nom025Html,
+      jsonSchema: {
+        type: 'object',
+        properties: {
+          informe_numero: { type: 'string' },
+          objetivo_razon_social: { type: 'string' },
+          objetivo_ubicacion: { type: 'string' },
+          campo_empresa: { type: 'string' },
+          campo_ubicacion: { type: 'string' },
+          centro_razon_social: { type: 'string' },
+          centro_rfc: { type: 'string' },
+          centro_domicilio: { type: 'string' },
+          centro_telefono: { type: 'string' },
+          centro_actividad: { type: 'string' },
+          centro_contacto: { type: 'string' },
+          centro_horarios: { type: 'string' },
+          ensayo_lugar_emision: { type: 'string' },
+          ensayo_fecha_emision: { type: 'string' },
+          ensayo_fecha: { type: 'string' },
+          ensayo_lugar: { type: 'string' },
+          ensayo_signatario: { type: 'string' },
+          ensayo_folio: { type: 'string' },
+          desarrollo_condiciones: { type: 'string' },
+          conclusion_texto: { type: 'string' },
+        },
+        required: ['objetivo_razon_social', 'centro_razon_social', 'ensayo_fecha'],
+      },
+      fieldsMetadata: [
+        { name: 'informe_numero', type: 'text', required: false },
+        { name: 'objetivo_razon_social', type: 'text', required: true },
+        { name: 'objetivo_ubicacion', type: 'text', required: false },
+        { name: 'centro_razon_social', type: 'text', required: true },
+        { name: 'centro_rfc', type: 'text', required: false },
+        { name: 'ensayo_fecha', type: 'date', required: true },
+        { name: 'desarrollo_condiciones', type: 'textarea', required: false },
+        { name: 'conclusion_texto', type: 'textarea', required: false },
+      ],
+      changeType: 'initial',
+      createdBy: su.id,
+    }).onConflictDoNothing();
+
+    // Assign NOM-025 form to tecnico
+    await db.insert(schema.formAssignments).values({
+      formId: fNom025.id,
+      tecnicoId: tc.id,
+      assignedBy: mg.id,
+      isActive: true,
+    }).onConflictDoNothing();
+
+    console.log('✅ Formulario NOM-025 created/verified');
+  }
+
+  // --- Clientes de Prueba ---
+  await db.insert(schema.clientes).values([
+    {
+      nombre: 'Carlos Mendoza',
+      empresa: 'Industrias del Norte S.A.',
+      email: 'cmendoza@industriasnorte.com',
+      telefono: '+52 81 1234 5678',
+      direccion: 'Av. Industrial 450, Monterrey, Nuevo León',
+      industria: 'industrial',
+      etiquetas: ['zona-norte', 'prioridad-alta'],
+      activo: true,
+    },
+    {
+      nombre: 'María García López',
+      empresa: 'Laboratorios Farmacéuticos MX',
+      email: 'mgarcia@labfarmamx.com',
+      telefono: '+52 55 9876 5432',
+      direccion: 'Calle Salud 120, CDMX',
+      industria: 'farmaceutica',
+      etiquetas: ['farmaceutica', 'recurrente'],
+      activo: true,
+    },
+    {
+      nombre: 'Roberto Sánchez Vega',
+      empresa: 'Alimentos Orgánicos del Bajío',
+      email: 'rsanchez@alimentosbajio.mx',
+      telefono: '+52 477 555 1234',
+      direccion: 'Carretera León-Silao Km 8, Guanajuato',
+      industria: 'alimentos',
+      etiquetas: ['alimentos', 'nuevo'],
+      activo: true,
+    },
+  ]).onConflictDoNothing();
+
+  console.log('✅ Clientes de prueba created/verified');
 
   console.log('🎉 Seed completed successfully!');
   console.log('');

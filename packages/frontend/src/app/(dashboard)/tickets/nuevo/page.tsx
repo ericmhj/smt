@@ -130,7 +130,6 @@ export default function NuevoTicketPage() {
             value={form.clienteId}
             onChange={(e) => setForm({ ...form, clienteId: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-            size={Math.min(5, filteredClientes.length || 1)}
           >
             <option value="">Seleccionar cliente...</option>
             {filteredClientes.map((c) => (
@@ -139,6 +138,9 @@ export default function NuevoTicketPage() {
               </option>
             ))}
           </select>
+          {form.clienteId && (
+            <p className="text-xs text-green-600 mt-1">✓ Cliente seleccionado</p>
+          )}
         </div>
 
         {/* Form Selection */}

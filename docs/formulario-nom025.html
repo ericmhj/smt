@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Informe de Ensayo – NOM-025-STPS-2008</title>
+<style>
+  :root {
+    --green: #1a6b3a;
+    --green-mid: #2e8b57;
+    --green-light: #e8f5ee;
+    --green-pale: #f4fbf7;
+    --gray-900: #111827;
+    --gray-700: #374151;
+    --gray-500: #6b7280;
+    --gray-300: #d1d5db;
+    --gray-100: #f3f4f6;
+    --white: #ffffff;
+    --border: #d1d5db;
+    --font-main: 'IBM Plex Sans', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-main); font-size: 13px; color: var(--gray-900); }
+  .page { max-width: 210mm; margin: 0 auto; padding: 24px 28px; }
+  .page-header { border-bottom: 3px solid var(--green); padding: 14px 0 10px; display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+  .company-name { font-size: 16px; font-weight: 600; color: var(--green); }
+  .header-addr { font-size: 10px; color: var(--gray-500); line-height: 1.5; }
+  .header-informe { font-size: 10px; font-weight: 600; color: var(--gray-700); text-align: right; font-family: var(--font-mono); }
+  .section-heading { font-size: 13px; font-weight: 600; color: var(--gray-900); margin: 20px 0 12px; padding-left: 10px; border-left: 3px solid var(--green); }
+  .subsection-heading { font-size: 12px; font-weight: 600; color: var(--gray-700); margin: 14px 0 8px; }
+  .form-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+  .form-table td { border: 1px solid var(--border); padding: 7px 10px; vertical-align: middle; }
+  .form-table td.label { background: var(--gray-100); font-weight: 500; font-size: 11.5px; color: var(--gray-700); width: 38%; }
+  .form-table td.value { background: var(--white); }
+  .form-table tr.header-row td { background: var(--green); color: var(--white); font-weight: 600; font-size: 12px; text-align: center; }
+  .form-table tr.subheader-row td { background: var(--green-light); font-weight: 600; font-size: 11px; color: var(--green); text-align: center; }
+  input[type="text"], input[type="number"], input[type="date"], input[type="time"], textarea, select {
+    width: 100%; border: none; border-bottom: 1px solid var(--gray-300); padding: 4px 2px; font-size: 12px; font-family: var(--font-main); background: transparent; outline: none;
+  }
+  input:focus, textarea:focus, select:focus { border-bottom-color: var(--green); }
+  textarea { min-height: 60px; resize: vertical; }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-bottom: 14px; }
+  .data-table th { background: var(--green); color: var(--white); font-weight: 600; padding: 6px 5px; text-align: center; border: 1px solid rgba(255,255,255,.2); font-size: 10px; }
+  .data-table td { border: 1px solid var(--border); padding: 4px; text-align: center; }
+  .data-table td.row-num { background: var(--green-light); font-weight: 600; color: var(--green); font-family: var(--font-mono); font-size: 10px; width: 30px; }
+  .data-table input { font-size: 10px; text-align: center; }
+  .conclusion-box { background: var(--green); color: var(--white); padding: 8px 14px; font-weight: 600; font-size: 12px; }
+  .firma-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 30px; }
+  .firma-box { text-align: center; }
+  .firma-line { border-bottom: 1.5px solid var(--gray-700); margin: 0 auto 6px; width: 80%; height: 40px; }
+  .firma-label { font-size: 11px; font-weight: 600; color: var(--gray-700); }
+  .norma-list { list-style: none; margin-bottom: 12px; }
+  .norma-list li { padding: 8px 12px; margin-bottom: 6px; border-left: 3px solid var(--green); background: var(--green-pale); font-size: 12px; }
+  .norma-list li strong { color: var(--green); }
+  .nota-box { border: 1px solid var(--border); padding: 10px 14px; margin-bottom: 14px; background: var(--green-pale); font-size: 11px; line-height: 1.6; }
+  .nota-title { font-weight: 700; color: var(--green); font-size: 12px; margin-bottom: 6px; }
+  .divider { border: none; border-top: 1px solid var(--gray-300); margin: 16px 0; }
+</style>
+</head>
+<body>
+<form>
+<div class="page">
+  <div class="page-header">
+    <div>
+      <span class="company-name">S.A. de C.V.</span><br>
+      <span class="header-addr">Domicilio Operativo / Fiscal</span>
+    </div>
+    <div class="header-informe">
+      INFORME NO. <input type="text" name="informe_numero" style="width:120px;display:inline-block;">
+    </div>
+  </div>
+
+  <!-- SECCIÓN 1: OBJETIVO -->
+  <div class="section-heading">1. Objetivo</div>
+  <p style="font-size:12px; line-height:1.7; color:var(--gray-700); margin-bottom:8px;">
+    Realizar reconocimiento y evaluar el nivel de Iluminación y factor de reflexión del centro de trabajo
+  </p>
+  <table class="form-table">
+    <tr><td class="label">Nombre / Razón Social del Centro de Trabajo</td><td class="value"><input type="text" name="objetivo_razon_social"></td></tr>
+    <tr><td class="label">Ubicado en</td><td class="value"><input type="text" name="objetivo_ubicacion"></td></tr>
+  </table>
+
+  <hr class="divider">
+
+  <!-- SECCIÓN 2: CAMPO DE APLICACIÓN -->
+  <div class="section-heading">2. Campo de Aplicación</div>
+  <table class="form-table">
+    <tr><td class="label">Empresa</td><td class="value"><input type="text" name="campo_empresa"></td></tr>
+    <tr><td class="label">Ubicada en</td><td class="value"><input type="text" name="campo_ubicacion"></td></tr>
+  </table>
+
+  <hr class="divider">
+
+  <!-- SECCIÓN 6: DATOS DEL CENTRO DE TRABAJO -->
+  <div class="section-heading">6. Datos del Centro de Trabajo</div>
+  <div class="subsection-heading">a) Datos Generales del Centro de Trabajo</div>
+  <table class="form-table">
+    <tr><td class="label">Nombre o Razón Social</td><td class="value"><input type="text" name="centro_razon_social"></td></tr>
+    <tr><td class="label">R.F.C.</td><td class="value"><input type="text" name="centro_rfc"></td></tr>
+    <tr><td class="label">Domicilio del Centro de Trabajo</td><td class="value"><input type="text" name="centro_domicilio"></td></tr>
+    <tr><td class="label">Teléfono</td><td class="value"><input type="text" name="centro_telefono"></td></tr>
+    <tr><td class="label">Actividad Principal</td><td class="value"><input type="text" name="centro_actividad"></td></tr>
+    <tr><td class="label">Usuario / Contacto</td><td class="value"><input type="text" name="centro_contacto"></td></tr>
+    <tr><td class="label">Horarios de Trabajo</td><td class="value"><input type="text" name="centro_horarios"></td></tr>
+  </table>
+
+  <div class="subsection-heading">b) Datos Generales del Ensayo</div>
+  <table class="form-table">
+    <tr><td class="label">Lugar de emisión del informe</td><td class="value"><input type="text" name="ensayo_lugar_emision"></td></tr>
+    <tr><td class="label">Fecha de emisión del informe</td><td class="value"><input type="date" name="ensayo_fecha_emision"></td></tr>
+    <tr><td class="label">Fecha del ensayo</td><td class="value"><input type="date" name="ensayo_fecha"></td></tr>
+    <tr><td class="label">Lugar donde se realizó el ensayo</td><td class="value"><input type="text" name="ensayo_lugar"></td></tr>
+    <tr><td class="label">Personal signatario</td><td class="value"><input type="text" name="ensayo_signatario"></td></tr>
+    <tr><td class="label">Folio / No. de Control</td><td class="value"><input type="text" name="ensayo_folio"></td></tr>
+  </table>
+
+  <div class="subsection-heading">c) Datos del Laboratorio de Pruebas</div>
+  <table class="form-table">
+    <tr><td class="label">Denominación o Razón Social</td><td class="value"><input type="text" name="lab_razon_social"></td></tr>
+    <tr><td class="label">No. y Fecha de Acreditación</td><td class="value"><input type="text" name="lab_acreditacion"></td></tr>
+    <tr><td class="label">No. y Fecha de Aprobación STPS</td><td class="value"><input type="text" name="lab_aprobacion_stps"></td></tr>
+    <tr><td class="label">Domicilio Completo</td><td class="value"><input type="text" name="lab_domicilio"></td></tr>
+  </table>
+
+  <div class="subsection-heading">Equipos Utilizados en la Medición</div>
+  <table class="form-table">
+    <tr><td class="label">Número de identificación; ID</td><td class="value"><input type="text" name="equipo_id"></td></tr>
+    <tr><td class="label">Instrumento</td><td class="value"><input type="text" name="equipo_instrumento" value="Medidor de Iluminancia"></td></tr>
+    <tr><td class="label">Marca</td><td class="value"><input type="text" name="equipo_marca"></td></tr>
+    <tr><td class="label">Modelo</td><td class="value"><input type="text" name="equipo_modelo"></td></tr>
+    <tr><td class="label">No. de Serie</td><td class="value"><input type="text" name="equipo_serie"></td></tr>
+    <tr><td class="label">Calibrado por</td><td class="value"><input type="text" name="equipo_calibrado_por"></td></tr>
+    <tr><td class="label">No. de Certificado de Calibración</td><td class="value"><input type="text" name="equipo_certificado"></td></tr>
+    <tr><td class="label">Fecha de Calibración</td><td class="value"><input type="date" name="equipo_fecha_calibracion"></td></tr>
+  </table>
+
+  <hr class="divider">
+
+  <!-- SECCIÓN 7: DESARROLLO -->
+  <div class="section-heading">7. Desarrollo y contenido del Informe</div>
+  <div class="subsection-heading">a) Condiciones normales de operación</div>
+  <textarea name="desarrollo_condiciones" placeholder="Describa las condiciones normales de operación..."></textarea>
+
+  <div class="subsection-heading">c) Descripción de las instalaciones</div>
+  <table class="form-table">
+    <tr><td class="label">¿Utiliza luminarias de emergencia?</td><td class="value"><select name="instalaciones_emergencia"><option value="">Seleccionar...</option><option value="si">Sí</option><option value="no">No</option></select></td></tr>
+    <tr><td class="label">Percepción de iluminación por el trabajador</td><td class="value"><select name="instalaciones_percepcion"><option value="">Seleccionar...</option><option value="adecuada">Adecuada</option><option value="insuficiente">Insuficiente</option><option value="excesiva">Excesiva</option></select></td></tr>
+    <tr><td class="label">Largo del área (m)</td><td class="value"><input type="number" name="instalaciones_largo" step="0.01"></td></tr>
+    <tr><td class="label">Ancho del área (m)</td><td class="value"><input type="number" name="instalaciones_ancho" step="0.01"></td></tr>
+    <tr><td class="label">Altura plano de trabajo a luminarias (m)</td><td class="value"><input type="number" name="instalaciones_altura" step="0.01"></td></tr>
+    <tr><td class="label">No. de luminarias</td><td class="value"><input type="number" name="instalaciones_num_luminarias"></td></tr>
+    <tr><td class="label">Tipo de lámpara</td><td class="value"><input type="text" name="instalaciones_tipo_lampara"></td></tr>
+    <tr><td class="label">Potencia por lámpara (W)</td><td class="value"><input type="number" name="instalaciones_potencia_w"></td></tr>
+    <tr><td class="label">Acabados (paredes, piso, plano)</td><td class="value"><input type="text" name="instalaciones_acabados"></td></tr>
+  </table>
+
+  <div class="subsection-heading">d) Puntos evaluados</div>
+  <table class="data-table">
+    <thead>
+      <tr><th>No.</th><th>Área(s)</th><th>Zona(s)</th><th>Identificación del Punto</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="row-num">1</td><td><input type="text" name="punto_1_area"></td><td><input type="text" name="punto_1_zona"></td><td><input type="text" name="punto_1_id"></td></tr>
+      <tr><td class="row-num">2</td><td><input type="text" name="punto_2_area"></td><td><input type="text" name="punto_2_zona"></td><td><input type="text" name="punto_2_id"></td></tr>
+      <tr><td class="row-num">3</td><td><input type="text" name="punto_3_area"></td><td><input type="text" name="punto_3_zona"></td><td><input type="text" name="punto_3_id"></td></tr>
+      <tr><td class="row-num">4</td><td><input type="text" name="punto_4_area"></td><td><input type="text" name="punto_4_zona"></td><td><input type="text" name="punto_4_id"></td></tr>
+      <tr><td class="row-num">5</td><td><input type="text" name="punto_5_area"></td><td><input type="text" name="punto_5_zona"></td><td><input type="text" name="punto_5_id"></td></tr>
+      <tr><td class="row-num">6</td><td><input type="text" name="punto_6_area"></td><td><input type="text" name="punto_6_zona"></td><td><input type="text" name="punto_6_id"></td></tr>
+      <tr><td class="row-num">7</td><td><input type="text" name="punto_7_area"></td><td><input type="text" name="punto_7_zona"></td><td><input type="text" name="punto_7_id"></td></tr>
+      <tr><td class="row-num">8</td><td><input type="text" name="punto_8_area"></td><td><input type="text" name="punto_8_zona"></td><td><input type="text" name="punto_8_id"></td></tr>
+      <tr><td class="row-num">9</td><td><input type="text" name="punto_9_area"></td><td><input type="text" name="punto_9_zona"></td><td><input type="text" name="punto_9_id"></td></tr>
+      <tr><td class="row-num">10</td><td><input type="text" name="punto_10_area"></td><td><input type="text" name="punto_10_zona"></td><td><input type="text" name="punto_10_id"></td></tr>
+      <tr><td class="row-num">11</td><td><input type="text" name="punto_11_area"></td><td><input type="text" name="punto_11_zona"></td><td><input type="text" name="punto_11_id"></td></tr>
+      <tr><td class="row-num">12</td><td><input type="text" name="punto_12_area"></td><td><input type="text" name="punto_12_zona"></td><td><input type="text" name="punto_12_id"></td></tr>
+      <tr><td class="row-num">13</td><td><input type="text" name="punto_13_area"></td><td><input type="text" name="punto_13_zona"></td><td><input type="text" name="punto_13_id"></td></tr>
+      <tr><td class="row-num">14</td><td><input type="text" name="punto_14_area"></td><td><input type="text" name="punto_14_zona"></td><td><input type="text" name="punto_14_id"></td></tr>
+      <tr><td class="row-num">15</td><td><input type="text" name="punto_15_area"></td><td><input type="text" name="punto_15_zona"></td><td><input type="text" name="punto_15_id"></td></tr>
+      <tr><td class="row-num">16</td><td><input type="text" name="punto_16_area"></td><td><input type="text" name="punto_16_zona"></td><td><input type="text" name="punto_16_id"></td></tr>
+      <tr><td class="row-num">17</td><td><input type="text" name="punto_17_area"></td><td><input type="text" name="punto_17_zona"></td><td><input type="text" name="punto_17_id"></td></tr>
+      <tr><td class="row-num">18</td><td><input type="text" name="punto_18_area"></td><td><input type="text" name="punto_18_zona"></td><td><input type="text" name="punto_18_id"></td></tr>
+      <tr><td class="row-num">19</td><td><input type="text" name="punto_19_area"></td><td><input type="text" name="punto_19_zona"></td><td><input type="text" name="punto_19_id"></td></tr>
+      <tr><td class="row-num">20</td><td><input type="text" name="punto_20_area"></td><td><input type="text" name="punto_20_zona"></td><td><input type="text" name="punto_20_id"></td></tr>
+    </tbody>
+  </table>
+
+  <hr class="divider">
+
+  <!-- SECCIÓN 8: RESULTADOS -->
+  <div class="section-heading">8. Resultados de la evaluación</div>
+  <table class="data-table">
+    <thead>
+      <tr><th colspan="7" style="font-size:11px;">PRIMERA HORA DEL TURNO / ÚNICA LECTURA</th></tr>
+      <tr>
+        <th>Área/Zona</th>
+        <th>Punto</th>
+        <th>Hora lectura</th>
+        <th>Iluminancia (lx)</th>
+        <th>U (lx)</th>
+        <th>N.M.I (lx)</th>
+        <th>Kf (%)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><input type="text" name="r1_area"></td><td class="row-num">1</td><td><input type="time" name="r1_hora"></td><td><input type="number" name="r1_iluminancia" step="0.1"></td><td><input type="number" name="r1_u" step="0.1"></td><td><input type="number" name="r1_nmi" step="0.1"></td><td><input type="number" name="r1_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r2_area"></td><td class="row-num">2</td><td><input type="time" name="r2_hora"></td><td><input type="number" name="r2_iluminancia" step="0.1"></td><td><input type="number" name="r2_u" step="0.1"></td><td><input type="number" name="r2_nmi" step="0.1"></td><td><input type="number" name="r2_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r3_area"></td><td class="row-num">3</td><td><input type="time" name="r3_hora"></td><td><input type="number" name="r3_iluminancia" step="0.1"></td><td><input type="number" name="r3_u" step="0.1"></td><td><input type="number" name="r3_nmi" step="0.1"></td><td><input type="number" name="r3_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r4_area"></td><td class="row-num">4</td><td><input type="time" name="r4_hora"></td><td><input type="number" name="r4_iluminancia" step="0.1"></td><td><input type="number" name="r4_u" step="0.1"></td><td><input type="number" name="r4_nmi" step="0.1"></td><td><input type="number" name="r4_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r5_area"></td><td class="row-num">5</td><td><input type="time" name="r5_hora"></td><td><input type="number" name="r5_iluminancia" step="0.1"></td><td><input type="number" name="r5_u" step="0.1"></td><td><input type="number" name="r5_nmi" step="0.1"></td><td><input type="number" name="r5_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r6_area"></td><td class="row-num">6</td><td><input type="time" name="r6_hora"></td><td><input type="number" name="r6_iluminancia" step="0.1"></td><td><input type="number" name="r6_u" step="0.1"></td><td><input type="number" name="r6_nmi" step="0.1"></td><td><input type="number" name="r6_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r7_area"></td><td class="row-num">7</td><td><input type="time" name="r7_hora"></td><td><input type="number" name="r7_iluminancia" step="0.1"></td><td><input type="number" name="r7_u" step="0.1"></td><td><input type="number" name="r7_nmi" step="0.1"></td><td><input type="number" name="r7_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r8_area"></td><td class="row-num">8</td><td><input type="time" name="r8_hora"></td><td><input type="number" name="r8_iluminancia" step="0.1"></td><td><input type="number" name="r8_u" step="0.1"></td><td><input type="number" name="r8_nmi" step="0.1"></td><td><input type="number" name="r8_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r9_area"></td><td class="row-num">9</td><td><input type="time" name="r9_hora"></td><td><input type="number" name="r9_iluminancia" step="0.1"></td><td><input type="number" name="r9_u" step="0.1"></td><td><input type="number" name="r9_nmi" step="0.1"></td><td><input type="number" name="r9_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r10_area"></td><td class="row-num">10</td><td><input type="time" name="r10_hora"></td><td><input type="number" name="r10_iluminancia" step="0.1"></td><td><input type="number" name="r10_u" step="0.1"></td><td><input type="number" name="r10_nmi" step="0.1"></td><td><input type="number" name="r10_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r11_area"></td><td class="row-num">11</td><td><input type="time" name="r11_hora"></td><td><input type="number" name="r11_iluminancia" step="0.1"></td><td><input type="number" name="r11_u" step="0.1"></td><td><input type="number" name="r11_nmi" step="0.1"></td><td><input type="number" name="r11_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r12_area"></td><td class="row-num">12</td><td><input type="time" name="r12_hora"></td><td><input type="number" name="r12_iluminancia" step="0.1"></td><td><input type="number" name="r12_u" step="0.1"></td><td><input type="number" name="r12_nmi" step="0.1"></td><td><input type="number" name="r12_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r13_area"></td><td class="row-num">13</td><td><input type="time" name="r13_hora"></td><td><input type="number" name="r13_iluminancia" step="0.1"></td><td><input type="number" name="r13_u" step="0.1"></td><td><input type="number" name="r13_nmi" step="0.1"></td><td><input type="number" name="r13_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r14_area"></td><td class="row-num">14</td><td><input type="time" name="r14_hora"></td><td><input type="number" name="r14_iluminancia" step="0.1"></td><td><input type="number" name="r14_u" step="0.1"></td><td><input type="number" name="r14_nmi" step="0.1"></td><td><input type="number" name="r14_kf" step="0.1"></td></tr>
+      <tr><td><input type="text" name="r15_area"></td><td class="row-num">15</td><td><input type="time" name="r15_hora"></td><td><input type="number" name="r15_iluminancia" step="0.1"></td><td><input type="number" name="r15_u" step="0.1"></td><td><input type="number" name="r15_nmi" step="0.1"></td><td><input type="number" name="r15_kf" step="0.1"></td></tr>
+    </tbody>
+  </table>
+
+  <hr class="divider">
+
+  <!-- SECCIÓN 9: CONCLUSIÓN -->
+  <div class="conclusion-box">9. Conclusión Técnica del Informe de Ensayo</div>
+  <div style="border:1px solid var(--border); padding:12px; margin-bottom:14px;">
+    <label style="font-size:11px; color:var(--gray-500); display:block; margin-bottom:4px;">Fecha del ensayo:</label>
+    <input type="date" name="conclusion_fecha">
+    <label style="font-size:11px; color:var(--gray-500); display:block; margin:8px 0 4px;">Área denominada:</label>
+    <input type="text" name="conclusion_area">
+    <label style="font-size:11px; color:var(--gray-500); display:block; margin:8px 0 4px;">Conclusión:</label>
+    <textarea name="conclusion_texto" placeholder="Conclusión técnica del informe..."></textarea>
+  </div>
+
+  <!-- SECCIÓN 10: AUTORIZACIÓN -->
+  <div class="section-heading">10. Autorización del Informe de Ensayo</div>
+  <div class="firma-grid">
+    <div class="firma-box">
+      <div class="firma-line"></div>
+      <div class="firma-label">Signatario Acreditado y Aprobado</div>
+      <input type="text" name="firma_signatario" placeholder="Nombre completo" style="text-align:center; margin-top:4px;">
+    </div>
+    <div class="firma-box">
+      <div class="firma-line"></div>
+      <div class="firma-label">Responsable del Informe</div>
+      <input type="text" name="firma_responsable" placeholder="Nombre completo" style="text-align:center; margin-top:4px;">
+    </div>
+  </div>
+
+</div>
+</form>
+</body>
+</html>
