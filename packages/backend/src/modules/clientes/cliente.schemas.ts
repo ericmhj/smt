@@ -4,13 +4,14 @@ import { z } from 'zod';
 
 export const createClienteSchema = z.object({
   nombre: z.string().min(1, 'El nombre es obligatorio').max(255),
-  empresa: z.string().min(1).max(255).optional(),
+  empresa: z.string().max(255).optional(),
+  rfc: z.string().min(10, 'RFC debe tener al menos 10 caracteres').max(20, 'RFC máximo 20 caracteres'),
   email: z.string().email('Formato de email inválido'),
-  telefono: z
-    .string()
-    .regex(/^\+?[\d\s\-]{7,15}$/, 'Formato de teléfono inválido (7-15 dígitos)')
-    .optional(),
-  direccion: z.string().max(500).optional(),
+  telefono: z.string().min(7, 'Teléfono inválido').max(30),
+  direccionCentroTrabajo: z.string().min(1, 'El domicilio es obligatorio').max(500),
+  actividadPrincipal: z.string().min(1, 'La actividad principal es obligatoria').max(255),
+  contacto: z.string().min(1, 'El contacto es obligatorio').max(255),
+  horarios: z.string().min(1, 'Los horarios son obligatorios').max(255),
   industria: z.string().max(100).optional(),
   etiquetas: z
     .array(z.string().max(50))
@@ -20,13 +21,14 @@ export const createClienteSchema = z.object({
 
 export const updateClienteSchema = z.object({
   nombre: z.string().min(1).max(255).optional(),
-  empresa: z.string().min(1).max(255).optional(),
+  empresa: z.string().max(255).optional(),
+  rfc: z.string().min(10).max(20).optional(),
   email: z.string().email('Formato de email inválido').optional(),
-  telefono: z
-    .string()
-    .regex(/^\+?[\d\s\-]{7,15}$/, 'Formato de teléfono inválido (7-15 dígitos)')
-    .optional(),
-  direccion: z.string().max(500).nullish(),
+  telefono: z.string().min(7).max(30).optional(),
+  direccionCentroTrabajo: z.string().min(1).max(500).optional(),
+  actividadPrincipal: z.string().min(1).max(255).optional(),
+  contacto: z.string().min(1).max(255).optional(),
+  horarios: z.string().min(1).max(255).optional(),
   industria: z.string().max(100).nullish(),
   etiquetas: z
     .array(z.string().max(50))

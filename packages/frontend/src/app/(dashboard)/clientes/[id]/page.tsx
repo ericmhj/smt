@@ -36,9 +36,13 @@ interface Cliente {
   id: string;
   nombre: string;
   empresa: string | null;
+  rfc: string;
   email: string;
-  telefono: string | null;
-  direccion: string | null;
+  telefono: string;
+  direccionCentroTrabajo: string;
+  actividadPrincipal: string;
+  contacto: string;
+  horarios: string;
   industria: string | null;
   etiquetas: string[];
   activo: boolean;
@@ -165,13 +169,18 @@ export default function ClienteDetallePage() {
 
       {/* Info Card */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Información</h2>
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Información del Centro de Trabajo</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div><span className="font-medium text-gray-600">Empresa:</span> {cliente.empresa || '—'}</div>
+          <div><span className="font-medium text-gray-600">Nombre o Razón Social:</span> {cliente.nombre}</div>
+          <div><span className="font-medium text-gray-600">R.F.C.:</span> {cliente.rfc || '—'}</div>
+          <div className="md:col-span-2"><span className="font-medium text-gray-600">Domicilio del Centro de Trabajo:</span> {cliente.direccionCentroTrabajo || '—'}</div>
+          <div><span className="font-medium text-gray-600">Teléfono:</span> {cliente.telefono}</div>
           <div><span className="font-medium text-gray-600">Email:</span> {cliente.email}</div>
-          <div><span className="font-medium text-gray-600">Teléfono:</span> {cliente.telefono || '—'}</div>
+          <div><span className="font-medium text-gray-600">Actividad Principal:</span> {cliente.actividadPrincipal || '—'}</div>
+          <div><span className="font-medium text-gray-600">Usuario / Contacto:</span> {cliente.contacto || '—'}</div>
+          <div><span className="font-medium text-gray-600">Horarios de Trabajo:</span> {cliente.horarios || '—'}</div>
           <div><span className="font-medium text-gray-600">Industria:</span> <span className="capitalize">{cliente.industria || '—'}</span></div>
-          <div><span className="font-medium text-gray-600">Dirección:</span> {cliente.direccion || '—'}</div>
+          <div><span className="font-medium text-gray-600">Empresa:</span> {cliente.empresa || '—'}</div>
           <div>
             <span className="font-medium text-gray-600">Estado:</span>{' '}
             <span className={`px-2 py-0.5 rounded-full text-xs ${cliente.activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>

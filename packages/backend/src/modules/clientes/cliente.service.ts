@@ -34,11 +34,6 @@ export class ClienteService {
     // Validate email uniqueness
     await this.assertEmailUnique(data.email);
 
-    // Validate phone uniqueness
-    if (data.telefono) {
-      await this.assertPhoneUnique(data.telefono);
-    }
-
     // Normalize tags
     const etiquetas = this.normalizeTags(data.etiquetas);
 
@@ -47,9 +42,13 @@ export class ClienteService {
       .values({
         nombre: data.nombre,
         empresa: data.empresa ?? null,
+        rfc: data.rfc,
         email: data.email,
-        telefono: data.telefono ?? null,
-        direccion: data.direccion ?? null,
+        telefono: data.telefono,
+        direccionCentroTrabajo: data.direccionCentroTrabajo,
+        actividadPrincipal: data.actividadPrincipal,
+        contacto: data.contacto,
+        horarios: data.horarios,
         industria: data.industria ?? null,
         etiquetas,
       })
@@ -74,18 +73,17 @@ export class ClienteService {
       await this.assertEmailUnique(data.email);
     }
 
-    // Validate phone uniqueness if changed
-    if (data.telefono && data.telefono !== existing.telefono) {
-      await this.assertPhoneUnique(data.telefono);
-    }
-
     // Build update values
     const updateValues: Record<string, unknown> = {};
     if (data.nombre !== undefined) updateValues.nombre = data.nombre;
     if (data.empresa !== undefined) updateValues.empresa = data.empresa;
+    if (data.rfc !== undefined) updateValues.rfc = data.rfc;
     if (data.email !== undefined) updateValues.email = data.email;
     if (data.telefono !== undefined) updateValues.telefono = data.telefono;
-    if (data.direccion !== undefined) updateValues.direccion = data.direccion;
+    if (data.direccionCentroTrabajo !== undefined) updateValues.direccionCentroTrabajo = data.direccionCentroTrabajo;
+    if (data.actividadPrincipal !== undefined) updateValues.actividadPrincipal = data.actividadPrincipal;
+    if (data.contacto !== undefined) updateValues.contacto = data.contacto;
+    if (data.horarios !== undefined) updateValues.horarios = data.horarios;
     if (data.industria !== undefined) updateValues.industria = data.industria;
     if (data.etiquetas !== undefined) {
       updateValues.etiquetas = this.normalizeTags(data.etiquetas);
@@ -474,9 +472,13 @@ export class ClienteService {
       id: row.id,
       nombre: row.nombre,
       empresa: row.empresa,
+      rfc: row.rfc,
       email: row.email,
       telefono: row.telefono,
-      direccion: row.direccion,
+      direccionCentroTrabajo: row.direccionCentroTrabajo,
+      actividadPrincipal: row.actividadPrincipal,
+      contacto: row.contacto,
+      horarios: row.horarios,
       industria: row.industria,
       etiquetas: (row.etiquetas as string[]) ?? [],
       asignadoA: row.asignadoA,

@@ -88,19 +88,42 @@ export class TicketService {
       throw new TicketError(400, TicketErrorCode.NOT_FOUND, 'Versión del formulario no encontrada');
     }
 
-    // Get client name for the card
+    // Get client data for the card and to pre-fill form responses
     const clienteResult = await this.db
-      .select({ nombre: clientes.nombre })
+      .select({
+        nombre: clientes.nombre,
+        rfc: clientes.rfc,
+        direccionCentroTrabajo: clientes.direccionCentroTrabajo,
+        telefono: clientes.telefono,
+        actividadPrincipal: clientes.actividadPrincipal,
+        contacto: clientes.contacto,
+        horarios: clientes.horarios,
+      })
       .from(clientes)
       .where(eq(clientes.id, data.clienteId))
       .limit(1);
 
-    const clienteNombre = clienteResult[0]?.nombre || null;
+    const cliente = clienteResult[0];
+    const clienteNombre = cliente?.nombre || null;
+
+    // Pre-fill responses with client data (section 6 of the form)
+    const preFilledResponses: Record<string, string> = {};
+    if (cliente) {
+      preFilledResponses.centro_razon_social = cliente.nombre;
+      preFilledResponses.objetivo_razon_social = cliente.nombre;
+      preFilledResponses.centro_rfc = cliente.rfc;
+      preFilledResponses.centro_domicilio = cliente.direccionCentroTrabajo;
+      preFilledResponses.objetivo_ubicacion = cliente.direccionCentroTrabajo;
+      preFilledResponses.centro_telefono = cliente.telefono;
+      preFilledResponses.centro_actividad = cliente.actividadPrincipal;
+      preFilledResponses.centro_contacto = cliente.contacto;
+      preFilledResponses.centro_horarios = cliente.horarios;
+    }
 
     // Determine tecnico ID (from ticket or default to actor)
     const tecnicoId = data.tecnicoAsignadoId || actor.sub;
 
-    // Create the reactivo (Kanban card)
+    // Create the reactivo (Kanban card) with pre-filled client data
     const reactivoResult = await this.db
       .insert(reactivos)
       .values({
@@ -108,7 +131,7 @@ export class TicketService {
         formVersionId: formVersionResult[0]!.id,
         tecnicoId,
         state: 'pendiente',
-        responses: {},
+        responses: preFilledResponses,
         fechaProgramada,
         clienteNombre,
       })

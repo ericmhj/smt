@@ -1,9 +1,13 @@
 export interface CreateClienteDTO {
   nombre: string;
   empresa?: string;
+  rfc: string;
   email: string;
-  telefono?: string;
-  direccion?: string;
+  telefono: string;
+  direccionCentroTrabajo: string;
+  actividadPrincipal: string;
+  contacto: string;
+  horarios: string;
   industria?: string;
   etiquetas?: string[];
 }
@@ -11,9 +15,13 @@ export interface CreateClienteDTO {
 export interface UpdateClienteDTO {
   nombre?: string;
   empresa?: string;
+  rfc?: string;
   email?: string;
   telefono?: string;
-  direccion?: string | null;
+  direccionCentroTrabajo?: string;
+  actividadPrincipal?: string;
+  contacto?: string;
+  horarios?: string;
   industria?: string | null;
   etiquetas?: string[];
 }
@@ -22,9 +30,13 @@ export interface ClienteResponse {
   id: string;
   nombre: string;
   empresa: string | null;
+  rfc: string;
   email: string;
-  telefono: string | null;
-  direccion: string | null;
+  telefono: string;
+  direccionCentroTrabajo: string;
+  actividadPrincipal: string;
+  contacto: string;
+  horarios: string;
   industria: string | null;
   etiquetas: string[];
   asignadoA: string | null;

@@ -18,36 +18,46 @@ export default function EnsayoFormModal({
   onClose,
   onSubmitSuccess,
 }: EnsayoFormModalProps) {
-  const formRef = useRef<HTMLFormElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<string[]>([]);
 
+  // Strip <form> tags from HTML to avoid nested forms
+  const strippedHtml = htmlContent
+    .replace(/<form[^>]*>/gi, '')
+    .replace(/<\/form>/gi, '');
+
   // Inject initial values after the HTML is rendered
   useEffect(() => {
-    if (!formRef.current || !initialResponses) return;
-    const form = formRef.current;
-    for (const [key, value] of Object.entries(initialResponses)) {
-      const element = form.elements.namedItem(key);
-      if (element && 'value' in element) {
-        (element as HTMLInputElement).value = String(value ?? '');
+    if (!containerRef.current || !initialResponses) return;
+    const timer = setTimeout(() => {
+      const container = containerRef.current;
+      if (!container) return;
+      for (const [key, value] of Object.entries(initialResponses)) {
+        const element = container.querySelector(`[name="${key}"]`) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+        if (element) {
+          element.value = String(value ?? '');
+        }
       }
-    }
-  }, [initialResponses, htmlContent]);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [initialResponses, strippedHtml]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     setError('');
     setFieldErrors([]);
 
-    if (!formRef.current) return;
+    if (!containerRef.current) return;
 
-    // Collect form data
-    const formData = new FormData(formRef.current);
+    // Collect form data from all named inputs in the container
+    const inputs = containerRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('[name]');
     const responses: Record<string, unknown> = {};
-    for (const [key, value] of formData.entries()) {
-      responses[key] = value;
-    }
+    inputs.forEach((el) => {
+      if (el.name) {
+        responses[el.name] = el.value;
+      }
+    });
 
     setSubmitting(true);
     try {
@@ -70,7 +80,7 @@ export default function EnsayoFormModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-semibold text-gray-800">Llenar Ensayo</h2>
@@ -99,14 +109,11 @@ export default function EnsayoFormModal({
             </div>
           )}
 
-          <form
-            ref={formRef}
-            onSubmit={handleSubmit}
-            id="ensayo-form"
+          <div
+            ref={containerRef}
             className="ensayo-form-container"
-          >
-            <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
-          </form>
+            dangerouslySetInnerHTML={{ __html: strippedHtml }}
+          />
         </div>
 
         {/* Footer */}
@@ -120,8 +127,8 @@ export default function EnsayoFormModal({
             Cancelar
           </button>
           <button
-            type="submit"
-            form="ensayo-form"
+            type="button"
+            onClick={handleSubmit}
             disabled={submitting}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
           >

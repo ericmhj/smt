@@ -6,9 +6,13 @@ CREATE TABLE IF NOT EXISTS clientes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   nombre VARCHAR(255) NOT NULL,
   empresa VARCHAR(255),
+  rfc VARCHAR(20) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
-  telefono VARCHAR(30) UNIQUE,
-  direccion VARCHAR(500),
+  telefono VARCHAR(30) NOT NULL,
+  direccion_centro_trabajo VARCHAR(500) NOT NULL,
+  actividad_principal VARCHAR(255) NOT NULL,
+  contacto VARCHAR(255) NOT NULL,
+  horarios VARCHAR(255) NOT NULL,
   industria VARCHAR(100),
   etiquetas JSONB NOT NULL DEFAULT '[]',
   asignado_a UUID REFERENCES users(id),
@@ -17,9 +21,12 @@ CREATE TABLE IF NOT EXISTS clientes (
     to_tsvector('spanish',
       coalesce(nombre, '') || ' ' ||
       coalesce(empresa, '') || ' ' ||
+      coalesce(rfc, '') || ' ' ||
       coalesce(email, '') || ' ' ||
       coalesce(telefono, '') || ' ' ||
-      coalesce(direccion, '') || ' ' ||
+      coalesce(direccion_centro_trabajo, '') || ' ' ||
+      coalesce(actividad_principal, '') || ' ' ||
+      coalesce(contacto, '') || ' ' ||
       coalesce(industria, '')
     )
   ) STORED,
