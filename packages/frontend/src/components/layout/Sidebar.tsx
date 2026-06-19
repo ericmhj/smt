@@ -12,6 +12,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
+  { label: 'Tenants', href: '/admin/tenants', roles: ['platform_admin'] },
   { label: 'Estado de los Ensayos', href: '/kanban', roles: ['superusuario', 'admin', 'manager'] },
   { label: 'Usuarios', href: '/users', roles: ['superusuario', 'admin'] },
   { label: 'Formularios', href: '/forms', roles: ['superusuario', 'admin', 'manager'] },
@@ -46,7 +47,7 @@ export default function Sidebar() {
         <p className="text-xs text-gray-500">Sistema de Gestión de Ensayos</p>
         <div className="mt-3 pt-3 border-t border-gray-100">
           <p className="text-sm font-medium text-gray-700 truncate">{user.name}</p>
-          <p className="text-xs text-gray-500 capitalize">{user.role === 'tecnico' ? 'Técnico' : user.role === 'admin' ? 'Administrador' : user.role}</p>
+          <p className="text-xs text-gray-500 capitalize">{user.role === 'platform_admin' ? 'Platform Admin' : user.role === 'tecnico' ? 'Técnico' : user.role === 'admin' ? 'Administrador' : user.role}</p>
         </div>
       </div>
       <nav className="space-y-1">

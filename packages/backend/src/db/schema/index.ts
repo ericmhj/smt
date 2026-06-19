@@ -15,3 +15,5 @@ export { auditLogs } from './audit.js';
 export { clientes, clienteContactos, clienteDocumentos } from './clientes.js';
 
 export { tickets, slaConfig, reglasAsignacion } from './tickets.js';
+
+export { tenants, plans } from './platform.js';

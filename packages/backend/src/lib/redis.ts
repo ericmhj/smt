@@ -13,6 +13,14 @@ export function getRedisClient(): Redis {
   return redisClient;
 }
 
+/**
+ * Constructs a tenant-namespaced Redis key.
+ * Format: {slug}:{part1}:{part2}:...
+ */
+export function tenantKey(slug: string, ...parts: string[]): string {
+  return `${slug}:${parts.join(':')}`;
+}
+
 export async function closeRedisConnection(): Promise<void> {
   if (redisClient) {
     await redisClient.quit();

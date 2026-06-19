@@ -9,6 +9,7 @@ import { registerSwagger } from './lib/swagger.js';
 import { helmetConfig, globalRateLimitConfig } from './lib/security.js';
 import { AuthService } from './modules/auth/auth.service.js';
 import { authMiddleware } from './modules/auth/auth.middleware.js';
+import { tenantMiddleware } from './modules/tenant/tenant.middleware.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { userRoutes } from './modules/users/user.routes.js';
 import { formRoutes } from './modules/forms/form.routes.js';
@@ -23,6 +24,7 @@ import { auditRoutes } from './modules/audit/audit.routes.js';
 import { clienteRoutes } from './modules/clientes/cliente.routes.js';
 import { documentoRoutes } from './modules/clientes/documento.routes.js';
 import { ticketRoutes } from './modules/tickets/ticket.routes.js';
+import { platformRoutes } from './modules/platform/platform.routes.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const config = loadConfig();
@@ -69,8 +71,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Register auth middleware
   await app.register(authMiddleware, { authService });
 
+  // Register tenant resolution middleware (after auth, before routes)
+  await app.register(tenantMiddleware);
+
   // Register auth routes (with stricter rate limit)
   await app.register(authRoutes, { authService });
+
+  // Register platform admin routes (must be before tenant-scoped routes)
+  await app.register(platformRoutes, { db });
 
   // Register user routes
   await app.register(userRoutes, { db });

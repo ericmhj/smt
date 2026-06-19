@@ -5,14 +5,16 @@ import { eq } from 'drizzle-orm';
 import type Redis from 'ioredis';
 import type { Database } from '../../db/index.js';
 import { users } from '../../db/schema/users.js';
-import { getRedisClient } from '../../lib/redis.js';
+import { tenants } from '../../db/schema/platform.js';
+import { getRedisClient, tenantKey } from '../../lib/redis.js';
+import { getSqlClient } from '../../db/index.js';
 import type { TokenPair, LoginResponse, JWTPayload, LoginDTO } from './auth.types.js';
 import { AuthErrorCode } from './auth.types.js';
 
 export class AuthError extends Error {
   constructor(
     public statusCode: number,
-    public code: AuthErrorCode,
+    public code: AuthErrorCode | string,
     message: string,
   ) {
     super(message);
@@ -46,35 +48,94 @@ export class AuthService {
     this.publicKey = await importSPKI(this.config.publicKey, 'RS256');
   }
 
-  async login(credentials: LoginDTO): Promise<LoginResponse> {
+  /**
+   * Resolves the tenant slug from the request Host header.
+   * Falls back to 'default' for localhost/IP/bare domain.
+   */
+  private resolveTenantSlugFromHost(host: string | undefined): string {
+    if (!host) return 'default';
+
+    // If it looks like a plain slug (no dots, no port), use directly
+    if (!host.includes('.') && !host.includes(':')) {
+      return host;
+    }
+
+    const hostWithoutPort = host.split(':')[0]!;
+
+    if (
+      hostWithoutPort === 'localhost' ||
+      hostWithoutPort === '127.0.0.1' ||
+      /^\d+\.\d+\.\d+\.\d+$/.test(hostWithoutPort)
+    ) {
+      return 'default';
+    }
+
+    const parts = hostWithoutPort.split('.');
+
+    // Handle X.localhost pattern (e.g., "acme.localhost")
+    if (parts.length === 2 && parts[1] === 'localhost') {
+      return parts[0]!;
+    }
+
+    // Handle X.domain.tld pattern (e.g., "acme.sgr.com")
+    if (parts.length >= 3) {
+      return parts[0]!;
+    }
+
+    return 'default';
+  }
+
+  async login(credentials: LoginDTO, host?: string): Promise<LoginResponse> {
     const { email, password } = credentials;
 
-    // Find user by email
-    const result = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.email, email))
+    // Resolve tenant from host subdomain
+    const tenantSlug = this.resolveTenantSlugFromHost(host);
+
+    // Look up tenant
+    const tenantResult = await this.db
+      .select({ id: tenants.id, status: tenants.status })
+      .from(tenants)
+      .where(eq(tenants.slug, tenantSlug))
       .limit(1);
 
-    const user = result[0];
+    const tenant = tenantResult[0];
+
+    if (!tenant) {
+      throw new AuthError(404, 'TENANT_NOT_FOUND', `Tenant '${tenantSlug}' no encontrado`);
+    }
+
+    if (tenant.status !== 'active') {
+      throw new AuthError(403, 'TENANT_SUSPENDED', 'El tenant se encuentra suspendido');
+    }
+
+    // Use a single connection to ensure search_path applies to the user query
+    const sql = getSqlClient();
+    const userRows = await sql`
+      SELECT id, email, password_hash, name, role, is_active
+      FROM sgr_${sql.unsafe(tenantSlug)}.users
+      WHERE email = ${email}
+      LIMIT 1
+    `;
+
+    const user = userRows[0];
 
     if (!user) {
       throw new AuthError(401, AuthErrorCode.INVALID_CREDENTIALS, 'Credenciales inválidas');
     }
 
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
     if (!isPasswordValid) {
       throw new AuthError(401, AuthErrorCode.INVALID_CREDENTIALS, 'Credenciales inválidas');
     }
 
     // Check if user is active
-    if (!user.isActive) {
+    if (!user.is_active) {
       throw new AuthError(401, AuthErrorCode.SESSION_REVOKED, 'Usuario desactivado');
     }
 
-    // Generate token pair
-    const tokenPair = await this.generateTokenPair(user.id, user.role);
+    // Generate token pair with tenant claims
+    const tokenPair = await this.generateTokenPair(user.id, user.role, tenant.id, tenantSlug);
 
     return {
       ...tokenPair,
@@ -83,6 +144,8 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        tenantId: tenant.id,
+        tenantSlug,
       },
     };
   }
@@ -92,7 +155,7 @@ export class AuthService {
     const payload = await this.verifyRefreshToken(refreshToken);
 
     // Check if refresh token exists in Redis (not revoked)
-    const redisKey = `refresh:${payload.sub}:${payload.jti}`;
+    const redisKey = tenantKey(payload.tenantSlug, 'refresh', payload.sub, payload.jti);
     const exists = await this.redis.exists(redisKey);
 
     if (!exists) {
@@ -102,13 +165,15 @@ export class AuthService {
     // Delete old refresh token (rotation)
     await this.redis.del(redisKey);
 
-    // Generate new token pair
-    return this.generateTokenPair(payload.sub, payload.role);
+    // Generate new token pair carrying forward tenant claims
+    return this.generateTokenPair(payload.sub, payload.role, payload.tenantId, payload.tenantSlug);
   }
 
-  async logout(userId: string, accessTokenJti?: string): Promise<void> {
-    // Delete all refresh tokens for user
-    const pattern = `refresh:${userId}:*`;
+  async logout(userId: string, accessTokenJti?: string, tenantSlug?: string): Promise<void> {
+    const slug = tenantSlug || 'default';
+
+    // Delete all refresh tokens for user (tenant-scoped)
+    const pattern = tenantKey(slug, 'refresh', userId, '*');
     const keys = await this.redis.keys(pattern);
     if (keys.length > 0) {
       await this.redis.del(...keys);
@@ -116,8 +181,7 @@ export class AuthService {
 
     // Add current access token to blacklist if provided
     if (accessTokenJti) {
-      // Blacklist for remaining TTL (max 15 minutes)
-      const blacklistKey = `blacklist:${accessTokenJti}`;
+      const blacklistKey = tenantKey(slug, 'blacklist', accessTokenJti);
       const ttlSeconds = 15 * 60; // 15 minutes max
       await this.redis.set(blacklistKey, '1', 'EX', ttlSeconds);
     }
@@ -136,13 +200,15 @@ export class AuthService {
       const jwtPayload: JWTPayload = {
         sub: payload.sub as string,
         role: payload.role as string,
+        tenantId: (payload.tenantId as string) || '00000000-0000-0000-0000-000000000001',
+        tenantSlug: (payload.tenantSlug as string) || 'default',
         iat: payload.iat as number,
         exp: payload.exp as number,
         jti: payload.jti as string,
       };
 
-      // Check if token is blacklisted
-      const blacklistKey = `blacklist:${jwtPayload.jti}`;
+      // Check if token is blacklisted (tenant-scoped)
+      const blacklistKey = tenantKey(jwtPayload.tenantSlug, 'blacklist', jwtPayload.jti);
       const isBlacklisted = await this.redis.exists(blacklistKey);
 
       if (isBlacklisted) {
@@ -161,7 +227,12 @@ export class AuthService {
     }
   }
 
-  private async generateTokenPair(userId: string, role: string): Promise<TokenPair> {
+  private async generateTokenPair(
+    userId: string,
+    role: string,
+    tenantId: string,
+    tenantSlug: string,
+  ): Promise<TokenPair> {
     if (!this.privateKey) {
       throw new AuthError(500, AuthErrorCode.TOKEN_INVALID, 'Servicio de autenticación no inicializado');
     }
@@ -170,7 +241,7 @@ export class AuthService {
     const refreshTokenJti = randomUUID();
 
     // Generate access token
-    const accessToken = await new SignJWT({ role })
+    const accessToken = await new SignJWT({ role, tenantId, tenantSlug })
       .setProtectedHeader({ alg: 'RS256' })
       .setSubject(userId)
       .setIssuedAt()
@@ -180,7 +251,7 @@ export class AuthService {
       .sign(this.privateKey);
 
     // Generate refresh token
-    const refreshToken = await new SignJWT({ role })
+    const refreshToken = await new SignJWT({ role, tenantId, tenantSlug })
       .setProtectedHeader({ alg: 'RS256' })
       .setSubject(userId)
       .setIssuedAt()
@@ -189,9 +260,9 @@ export class AuthService {
       .setJti(refreshTokenJti)
       .sign(this.privateKey);
 
-    // Store refresh token in Redis with TTL
+    // Store refresh token in Redis with TTL (tenant-namespaced)
     const refreshTtlSeconds = this.parseExpiryToSeconds(this.config.refreshTokenExpiry);
-    const redisKey = `refresh:${userId}:${refreshTokenJti}`;
+    const redisKey = tenantKey(tenantSlug, 'refresh', userId, refreshTokenJti);
     await this.redis.set(redisKey, '1', 'EX', refreshTtlSeconds);
 
     return { accessToken, refreshToken };
@@ -210,6 +281,8 @@ export class AuthService {
       return {
         sub: payload.sub as string,
         role: payload.role as string,
+        tenantId: (payload.tenantId as string) || '00000000-0000-0000-0000-000000000001',
+        tenantSlug: (payload.tenantSlug as string) || 'default',
         iat: payload.iat as number,
         exp: payload.exp as number,
         jti: payload.jti as string,

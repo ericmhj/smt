@@ -11,12 +11,16 @@ export interface LoginResponse {
     name: string;
     email: string;
     role: string;
+    tenantId: string;
+    tenantSlug: string;
   };
 }
 
 export interface JWTPayload {
   sub: string;
   role: string;
+  tenantId: string;
+  tenantSlug: string;
   iat: number;
   exp: number;
   jti: string;

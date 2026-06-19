@@ -1,9 +1,7 @@
--- SGR Database Initialization Script
--- Valid roles: superusuario, admin, manager, tecnico
--- Valid states: pendiente, en_revision, validado, rechazado, finalizado
-
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- Schema Template for Tenant Creation
+-- This file creates all tenant-scoped tables within a given schema.
+-- It is executed with search_path already set to the target schema.
+-- Excludes: catalogo_estados, tenants, plans (these remain in public schema)
 
 -- Users (role as VARCHAR to avoid enum migration issues)
 CREATE TABLE IF NOT EXISTS users (
@@ -143,65 +141,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_reactivos_responses ON reactivos USING GIN (responses);
-CREATE INDEX IF NOT EXISTS idx_reactivos_state ON reactivos (state);
-CREATE INDEX IF NOT EXISTS idx_reactivos_tecnico_id ON reactivos (tecnico_id);
-CREATE INDEX IF NOT EXISTS idx_reactivos_form_version ON reactivos (form_version_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_payload ON notifications USING GIN (payload);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_details ON audit_logs USING GIN (details);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs (entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_form_assignments_active ON form_assignments (tecnico_id, is_active);
-
--- Trigger: prevent UPDATE/DELETE on audit_logs
-CREATE OR REPLACE FUNCTION prevent_audit_modification()
-RETURNS TRIGGER AS $$
-BEGIN
-  RAISE EXCEPTION 'audit_logs table is append-only';
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS audit_logs_no_update ON audit_logs;
-CREATE TRIGGER audit_logs_no_update
-  BEFORE UPDATE OR DELETE ON audit_logs
-  FOR EACH ROW EXECUTE FUNCTION prevent_audit_modification();
-
-
--- ============================================================================
--- CATÁLOGOS DEL SISTEMA
--- ============================================================================
-
--- Catálogo de estados de reactivos
-CREATE TABLE IF NOT EXISTS catalogo_estados (
-  id SERIAL PRIMARY KEY,
-  codigo VARCHAR(50) UNIQUE NOT NULL,
-  etiqueta VARCHAR(100) NOT NULL,
-  color VARCHAR(50) NOT NULL,
-  orden INTEGER NOT NULL,
-  es_terminal BOOLEAN NOT NULL DEFAULT false,
-  activo BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Seed de estados
-INSERT INTO catalogo_estados (codigo, etiqueta, color, orden, es_terminal) VALUES
-  ('pendiente', 'Programado', 'yellow', 1, false),
-  ('en_revision', 'En Evaluación', 'blue', 2, false),
-  ('validado', 'Validado', 'green', 3, false),
-  ('rechazado', 'Rechazado', 'red', 4, true),
-  ('finalizado', 'Finalizado', 'gray', 5, true)
-ON CONFLICT (codigo) DO UPDATE SET
-  etiqueta = EXCLUDED.etiqueta,
-  color = EXCLUDED.color,
-  orden = EXCLUDED.orden,
-  es_terminal = EXCLUDED.es_terminal;
-
-
--- ============================================================================
--- MÓDULO DE CLIENTES
--- ============================================================================
-
 -- Clientes
 CREATE TABLE IF NOT EXISTS clientes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -298,7 +237,15 @@ CREATE TABLE IF NOT EXISTS reglas_asignacion (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Indexes for Clientes module
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_reactivos_responses ON reactivos USING GIN (responses);
+CREATE INDEX IF NOT EXISTS idx_reactivos_state ON reactivos (state);
+CREATE INDEX IF NOT EXISTS idx_reactivos_tecnico_id ON reactivos (tecnico_id);
+CREATE INDEX IF NOT EXISTS idx_reactivos_form_version ON reactivos (form_version_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_payload ON notifications USING GIN (payload);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_details ON audit_logs USING GIN (details);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs (entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_form_assignments_active ON form_assignments (tecnico_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_clientes_search ON clientes USING GIN (search_vector);
 CREATE INDEX IF NOT EXISTS idx_clientes_etiquetas ON clientes USING GIN (etiquetas);
 CREATE INDEX IF NOT EXISTS idx_clientes_empresa ON clientes (empresa);
@@ -310,94 +257,23 @@ CREATE INDEX IF NOT EXISTS idx_tickets_estado ON tickets (estado);
 CREATE INDEX IF NOT EXISTS idx_tickets_prioridad ON tickets (prioridad);
 CREATE INDEX IF NOT EXISTS idx_tickets_fecha_limite ON tickets (fecha_limite);
 
+-- Trigger: prevent UPDATE/DELETE on audit_logs
+CREATE OR REPLACE FUNCTION prevent_audit_modification()
+RETURNS TRIGGER AS $prevent_audit$
+BEGIN
+  RAISE EXCEPTION 'audit_logs table is append-only';
+  RETURN NULL;
+END;
+$prevent_audit$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS audit_logs_no_update ON audit_logs;
+CREATE TRIGGER audit_logs_no_update
+  BEFORE UPDATE OR DELETE ON audit_logs
+  FOR EACH ROW EXECUTE FUNCTION prevent_audit_modification();
+
 -- Seed SLA default values
 INSERT INTO sla_config (prioridad, horas_limite) VALUES
   ('alta', 24),
   ('media', 48),
   ('baja', 72)
 ON CONFLICT (prioridad) DO NOTHING;
-
-
--- ============================================================================
--- MULTI-TENANT PLATFORM TABLES (public schema)
--- ============================================================================
-
--- Tenants table
-CREATE TABLE IF NOT EXISTS tenants (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  slug VARCHAR(50) NOT NULL UNIQUE,
-  nombre VARCHAR(255) NOT NULL,
-  plan VARCHAR(50) NOT NULL DEFAULT 'starter',
-  status VARCHAR(20) NOT NULL DEFAULT 'active',
-  config JSONB DEFAULT '{}',
-  scheduled_deletion_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT tenants_status_check CHECK (status IN ('active', 'suspended', 'pending_deletion'))
-);
-
--- Plans table
-CREATE TABLE IF NOT EXISTS plans (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  nombre VARCHAR(100) NOT NULL UNIQUE,
-  max_users INTEGER NOT NULL,
-  max_forms INTEGER NOT NULL,
-  max_storage_mb INTEGER NOT NULL,
-  features JSONB DEFAULT '{}',
-  activo BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Schema migrations tracking table
-CREATE TABLE IF NOT EXISTS schema_migrations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  schema_name VARCHAR(100) NOT NULL,
-  migration_name VARCHAR(255) NOT NULL,
-  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE(schema_name, migration_name)
-);
-
--- Platform indexes
-CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants (status);
-CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants (slug);
-CREATE INDEX IF NOT EXISTS idx_schema_migrations_schema ON schema_migrations (schema_name);
-
--- Seed default plans
-INSERT INTO plans (nombre, max_users, max_forms, max_storage_mb, features) VALUES
-  ('starter', 10, 20, 1024, '{"reports": true, "api_access": false}'),
-  ('professional', 50, 100, 5120, '{"reports": true, "api_access": true, "custom_branding": true}'),
-  ('enterprise', 500, 1000, 51200, '{"reports": true, "api_access": true, "custom_branding": true, "sso": true, "audit_export": true}')
-ON CONFLICT (nombre) DO NOTHING;
-
--- Insert default tenant
-INSERT INTO tenants (id, slug, nombre, plan, status) VALUES
-  ('00000000-0000-0000-0000-000000000001', 'default', 'SGR Principal', 'starter', 'active')
-ON CONFLICT (slug) DO NOTHING;
-
--- ============================================================================
--- MULTI-TENANT: Move all tenant-scoped tables to sgr_default schema
--- ============================================================================
-
--- Create default tenant schema
-CREATE SCHEMA IF NOT EXISTS sgr_default;
-
--- Move tenant-scoped tables to sgr_default schema
--- Note: ALTER TABLE SET SCHEMA preserves all data, constraints, indexes, triggers, and sequences
-ALTER TABLE IF EXISTS public.users SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.forms SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.form_versions SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.form_assignments SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.reactivos SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.signatures SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.state_transitions SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.observations SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.observation_files SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.notifications SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.audit_logs SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.clientes SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.cliente_contactos SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.cliente_documentos SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.tickets SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.sla_config SET SCHEMA sgr_default;
-ALTER TABLE IF EXISTS public.reglas_asignacion SET SCHEMA sgr_default;

@@ -26,12 +26,27 @@ async function hashPassword(password: string): Promise<string> {
 async function seed() {
   console.log('🌱 Seeding database...');
 
+  // Set search_path to sgr_default for tenant-scoped tables
+  await client`SET search_path TO sgr_default, public`;
+
   // --- Users ---
   const superusuarioPassword = await hashPassword('admin123');
   const adminPassword = await hashPassword('admin123');
   const managerPassword = await hashPassword('manager123');
   const tecnicoPassword = await hashPassword('tecnico123');
   const asistentePassword = await hashPassword('asistente123');
+  const platformAdminPassword = await hashPassword('platform123');
+
+  // Platform admin user (in sgr_default schema for platform operations)
+  await db
+    .insert(schema.users)
+    .values({
+      email: 'platform@sgr.local',
+      passwordHash: platformAdminPassword,
+      name: 'Platform Admin',
+      role: 'platform_admin',
+    })
+    .onConflictDoNothing({ target: schema.users.email });
 
   const [superusuario] = await db
     .insert(schema.users)
@@ -362,11 +377,12 @@ async function seed() {
   console.log('🎉 Seed completed successfully!');
   console.log('');
   console.log('Test accounts:');
-  console.log('  Superusuario: admin@sgr.local / admin123');
-  console.log('  Admin:        administrador@sgr.local / admin123');
-  console.log('  Manager:      manager@sgr.local / manager123');
-  console.log('  Técnico:      tecnico@sgr.local / tecnico123');
-  console.log('  Asistente:    asistente@sgr.local / asistente123');
+  console.log('  Platform Admin: platform@sgr.local / platform123');
+  console.log('  Superusuario:   admin@sgr.local / admin123');
+  console.log('  Admin:          administrador@sgr.local / admin123');
+  console.log('  Manager:        manager@sgr.local / manager123');
+  console.log('  Técnico:        tecnico@sgr.local / tecnico123');
+  console.log('  Asistente:      asistente@sgr.local / asistente123');
 
   await client.end();
 }

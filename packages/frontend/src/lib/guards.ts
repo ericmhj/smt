@@ -1,6 +1,7 @@
-type Role = 'superusuario' | 'admin' | 'manager' | 'tecnico' | 'asistente';
+type Role = 'platform_admin' | 'superusuario' | 'admin' | 'manager' | 'tecnico' | 'asistente';
 
 const routePermissions: Record<string, Role[]> = {
+  '/admin': ['platform_admin'],
   '/users': ['superusuario', 'admin'],
   '/forms': ['superusuario', 'admin', 'manager'],
   '/assignments': ['superusuario', 'admin', 'manager'],
@@ -25,6 +26,8 @@ export function canAccessRoute(role: Role, pathname: string): boolean {
 
 export function getDefaultRoute(role: Role): string {
   switch (role) {
+    case 'platform_admin':
+      return '/admin/tenants';
     case 'superusuario':
     case 'admin':
       return '/kanban';

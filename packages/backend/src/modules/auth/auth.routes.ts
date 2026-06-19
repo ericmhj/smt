@@ -24,7 +24,10 @@ export async function authRoutes(
     }
 
     try {
-      const tokenPair = await authService.login(parseResult.data);
+      const tokenPair = await authService.login(
+        parseResult.data,
+        (request.headers['x-tenant-slug'] as string) || request.headers.host,
+      );
       return reply.status(200).send({
         accessToken: tokenPair.accessToken,
         refreshToken: tokenPair.refreshToken,
@@ -99,7 +102,7 @@ export async function authRoutes(
     }
 
     try {
-      await authService.logout(user.sub, user.jti);
+      await authService.logout(user.sub, user.jti, user.tenantSlug);
       return reply.status(200).send({
         message: 'Sesión cerrada exitosamente',
       });

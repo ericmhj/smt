@@ -1,0 +1,328 @@
+import { eq, and, lte } from 'drizzle-orm';
+import bcrypt from 'bcrypt';
+import type { Database } from '../../db/index.js';
+import { getSqlClient } from '../../db/index.js';
+import { tenants } from '../../db/schema/platform.js';
+import { applySchemaTemplate } from '../../db/apply-schema-template.js';
+import { getRedisClient } from '../../lib/redis.js';
+import { deleteAllWithPrefix } from '../../lib/minio.js';
+
+export class TenantLifecycleError extends Error {
+  constructor(
+    public statusCode: number,
+    public code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'TenantLifecycleError';
+  }
+}
+
+export interface CreateTenantDTO {
+  slug: string;
+  nombre: string;
+  plan: string;
+  adminEmail: string;
+  adminPassword: string;
+}
+
+export interface TenantRecord {
+  id: string;
+  slug: string;
+  nombre: string;
+  plan: string;
+  status: string;
+  config: unknown;
+  scheduledDeletionAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
+
+export class TenantLifecycleService {
+  private db: Database;
+
+  constructor(db: Database) {
+    this.db = db;
+  }
+
+  /**
+   * Validates the tenant slug format.
+   * Must be 3-50 chars, lowercase alphanumeric and hyphens, no leading/trailing hyphens.
+   */
+  private validateSlug(slug: string): void {
+    if (!SLUG_REGEX.test(slug)) {
+      throw new TenantLifecycleError(
+        422,
+        'INVALID_TENANT_SLUG',
+        `El slug '${slug}' no es válido. Debe contener entre 3-50 caracteres, solo letras minúsculas, números y guiones, sin comenzar ni terminar en guión.`,
+      );
+    }
+  }
+
+  /**
+   * Creates a new tenant with full schema provisioning.
+   * Atomic: either all artifacts are created or none.
+   */
+  async createTenant(dto: CreateTenantDTO): Promise<TenantRecord> {
+    this.validateSlug(dto.slug);
+
+    const sqlClient = getSqlClient();
+    const schemaName = `sgr_${dto.slug}`;
+
+    // Check for existing tenant with same slug
+    const existing = await this.db
+      .select({ id: tenants.id })
+      .from(tenants)
+      .where(eq(tenants.slug, dto.slug))
+      .limit(1);
+
+    if (existing.length > 0) {
+      throw new TenantLifecycleError(409, 'TENANT_SLUG_EXISTS', `El slug '${dto.slug}' ya está en uso`);
+    }
+
+    // Use a transaction for atomicity
+    try {
+      const result = await sqlClient.begin(async (tx) => {
+        // 1. Insert tenant record
+        const [tenantRecord] = await tx`
+          INSERT INTO public.tenants (slug, nombre, plan, status)
+          VALUES (${dto.slug}, ${dto.nombre}, ${dto.plan}, 'active')
+          RETURNING id, slug, nombre, plan, status, config, scheduled_deletion_at, created_at, updated_at
+        `;
+
+        // 2. Create schema
+        await tx.unsafe(`CREATE SCHEMA ${schemaName}`);
+
+        // 3. Apply schema template (creates all tables)
+        await applySchemaTemplate(tx, schemaName);
+
+        // 4. Insert admin user into the new schema
+        const passwordHash = await bcrypt.hash(dto.adminPassword, 10);
+        await tx.unsafe(`SET search_path TO ${schemaName}, public`);
+        await tx`
+          INSERT INTO users (email, password_hash, name, role, is_active)
+          VALUES (${dto.adminEmail}, ${passwordHash}, 'Administrador', 'admin', true)
+        `;
+
+        // Reset search_path
+        await tx.unsafe(`SET search_path TO public`);
+
+        return tenantRecord;
+      });
+
+      return {
+        id: result.id,
+        slug: result.slug,
+        nombre: result.nombre,
+        plan: result.plan,
+        status: result.status,
+        config: result.config,
+        scheduledDeletionAt: result.scheduled_deletion_at,
+        createdAt: result.created_at,
+        updatedAt: result.updated_at,
+      };
+    } catch (error) {
+      // If it's already a TenantLifecycleError, re-throw
+      if (error instanceof TenantLifecycleError) {
+        throw error;
+      }
+
+      // Attempt cleanup in case of partial failure
+      try {
+        await sqlClient.unsafe(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
+      } catch {
+        // Cleanup failure is non-critical at this point
+      }
+
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      throw new TenantLifecycleError(
+        500,
+        'TENANT_CREATION_FAILED',
+        `Error al crear el tenant: ${message}`,
+      );
+    }
+  }
+
+  /**
+   * Suspends an active tenant.
+   */
+  async suspendTenant(tenantId: string): Promise<TenantRecord> {
+    const tenant = await this.findTenantById(tenantId);
+
+    if (tenant.status !== 'active') {
+      throw new TenantLifecycleError(
+        409,
+        'INVALID_TENANT_STATE',
+        `No se puede suspender un tenant con estado '${tenant.status}'. Solo se pueden suspender tenants activos.`,
+      );
+    }
+
+    const [updated] = await this.db
+      .update(tenants)
+      .set({ status: 'suspended', updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId))
+      .returning();
+
+    // Invalidate Redis cache
+    await this.invalidateCache(tenant.slug);
+
+    return this.mapTenantRecord(updated!);
+  }
+
+  /**
+   * Reactivates a suspended or pending_deletion tenant.
+   */
+  async activateTenant(tenantId: string): Promise<TenantRecord> {
+    const tenant = await this.findTenantById(tenantId);
+
+    if (tenant.status !== 'suspended' && tenant.status !== 'pending_deletion') {
+      throw new TenantLifecycleError(
+        409,
+        'INVALID_TENANT_STATE',
+        `No se puede reactivar un tenant con estado '${tenant.status}'. Solo se pueden reactivar tenants suspendidos o pendientes de eliminación.`,
+      );
+    }
+
+    const [updated] = await this.db
+      .update(tenants)
+      .set({
+        status: 'active',
+        scheduledDeletionAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenants.id, tenantId))
+      .returning();
+
+    // Invalidate Redis cache
+    await this.invalidateCache(tenant.slug);
+
+    return this.mapTenantRecord(updated!);
+  }
+
+  /**
+   * Schedules a tenant for deletion with a 30-day grace period.
+   */
+  async scheduleDeletion(tenantId: string): Promise<TenantRecord> {
+    const tenant = await this.findTenantById(tenantId);
+
+    if (tenant.status !== 'active') {
+      throw new TenantLifecycleError(
+        409,
+        'INVALID_TENANT_STATE',
+        `No se puede programar la eliminación de un tenant con estado '${tenant.status}'. Solo se pueden eliminar tenants activos.`,
+      );
+    }
+
+    const scheduledDeletionAt = new Date();
+    scheduledDeletionAt.setDate(scheduledDeletionAt.getDate() + 30);
+
+    const [updated] = await this.db
+      .update(tenants)
+      .set({
+        status: 'pending_deletion',
+        scheduledDeletionAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(tenants.id, tenantId))
+      .returning();
+
+    // Invalidate Redis cache
+    await this.invalidateCache(tenant.slug);
+
+    return this.mapTenantRecord(updated!);
+  }
+
+  /**
+   * Executes pending deletions for tenants whose grace period has expired.
+   */
+  async executePendingDeletions(): Promise<void> {
+    const now = new Date();
+
+    const pendingTenants = await this.db
+      .select()
+      .from(tenants)
+      .where(
+        and(
+          eq(tenants.status, 'pending_deletion'),
+          lte(tenants.scheduledDeletionAt, now),
+        ),
+      );
+
+    const sqlClient = getSqlClient();
+
+    for (const tenant of pendingTenants) {
+      try {
+        const schemaName = `sgr_${tenant.slug}`;
+
+        // Drop the schema
+        await sqlClient.unsafe(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
+
+        // Delete Redis keys matching tenant pattern
+        await this.deleteRedisKeysForTenant(tenant.slug);
+
+        // Delete S3 objects with tenant prefix
+        await deleteAllWithPrefix(`${tenant.slug}/`);
+
+        // Delete tenant record
+        await this.db.delete(tenants).where(eq(tenants.id, tenant.id));
+      } catch (error) {
+        // Log error but continue with other tenants
+        console.error(`Error executing deletion for tenant ${tenant.slug}:`, error);
+      }
+    }
+  }
+
+  private async findTenantById(tenantId: string) {
+    const result = await this.db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+
+    if (result.length === 0) {
+      throw new TenantLifecycleError(404, 'TENANT_NOT_FOUND', 'Tenant no encontrado');
+    }
+
+    return result[0]!;
+  }
+
+  private async invalidateCache(slug: string): Promise<void> {
+    try {
+      const redis = getRedisClient();
+      await redis.del(`tenant:${slug}`);
+    } catch {
+      // Cache invalidation failure is non-critical
+    }
+  }
+
+  private async deleteRedisKeysForTenant(slug: string): Promise<void> {
+    try {
+      const redis = getRedisClient();
+      const pattern = `${slug}:*`;
+      const keys = await redis.keys(pattern);
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+      // Also delete the tenant status cache key
+      await redis.del(`tenant:${slug}`);
+    } catch {
+      // Redis cleanup failure is non-critical
+    }
+  }
+
+  private mapTenantRecord(raw: typeof tenants.$inferSelect): TenantRecord {
+    return {
+      id: raw.id,
+      slug: raw.slug,
+      nombre: raw.nombre,
+      plan: raw.plan,
+      status: raw.status,
+      config: raw.config,
+      scheduledDeletionAt: raw.scheduledDeletionAt,
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
+    };
+  }
+}

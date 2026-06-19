@@ -5,6 +5,8 @@ export interface User {
   name: string;
   email: string;
   role: string;
+  tenantId?: string;
+  tenantSlug?: string;
 }
 
 export function getStoredUser(): User | null {

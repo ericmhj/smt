@@ -15,3 +15,11 @@ export const db = drizzle(client, { schema });
 export type Database = typeof db;
 
 export { schema };
+
+/**
+ * Returns the underlying postgres.js SQL client for raw queries.
+ * Used by the tenant middleware to execute SET search_path commands.
+ */
+export function getSqlClient() {
+  return client;
+}
