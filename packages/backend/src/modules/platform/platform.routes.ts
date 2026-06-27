@@ -125,8 +125,23 @@ export async function platformRoutes(
       total = countResult?.total || 0;
     }
 
+    // Enrich with admin email for each tenant
+    const sqlClient = getSqlClient();
+    const enrichedData = await Promise.all(
+      data.map(async (t) => {
+        let adminEmail = '';
+        try {
+          const adminRes = await sqlClient.unsafe(
+            `SELECT email FROM sgr_${t.slug}.users WHERE role = 'admin' LIMIT 1`
+          );
+          adminEmail = adminRes[0]?.email || '';
+        } catch { /* schema may not exist */ }
+        return { ...t, adminEmail };
+      })
+    );
+
     return reply.status(200).send({
-      data,
+      data: enrichedData,
       pagination: {
         page,
         limit,
@@ -158,8 +173,9 @@ export async function platformRoutes(
 
     const tenant = result[0]!;
 
-    // Get user count from tenant schema
+    // Get user count and admin email from tenant schema
     let userCount = 0;
+    let adminEmail = '';
     try {
       const sqlClient = getSqlClient();
       const schemaName = `sgr_${tenant.slug}`;
@@ -167,6 +183,11 @@ export async function platformRoutes(
         `SELECT COUNT(*)::int as count FROM ${schemaName}.users`,
       );
       userCount = countRes[0]?.count || 0;
+
+      const adminRes = await sqlClient.unsafe(
+        `SELECT email FROM ${schemaName}.users WHERE role = 'admin' LIMIT 1`,
+      );
+      adminEmail = adminRes[0]?.email || '';
     } catch {
       // Schema might not exist yet
     }
@@ -175,6 +196,7 @@ export async function platformRoutes(
       ...tenant,
       metrics: {
         userCount,
+        adminEmail,
       },
     });
   });
@@ -240,5 +262,50 @@ export async function platformRoutes(
       }
       throw error;
     }
+  });
+
+  // PUT /api/platform/tenants/:id/reset-password — Reset admin password
+  fastify.put('/api/platform/tenants/:id/reset-password', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as { newPassword?: string };
+
+    if (!body.newPassword || body.newPassword.length < 6) {
+      return reply.status(400).send({
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+        message: 'La contraseña debe tener al menos 6 caracteres',
+        timestamp: new Date().toISOString(),
+        requestId: request.id,
+      });
+    }
+
+    const result = await opts.db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.id, id))
+      .limit(1);
+
+    if (result.length === 0) {
+      return reply.status(404).send({
+        statusCode: 404,
+        code: 'TENANT_NOT_FOUND',
+        message: 'Tenant no encontrado',
+        timestamp: new Date().toISOString(),
+        requestId: request.id,
+      });
+    }
+
+    const tenant = result[0]!;
+    const bcrypt = await import('bcrypt');
+    const passwordHash = await bcrypt.default.hash(body.newPassword, 10);
+    const sqlClient = getSqlClient();
+    const schemaName = `sgr_${tenant.slug}`;
+
+    await sqlClient.unsafe(
+      `UPDATE ${schemaName}.users SET password_hash = $1 WHERE role = 'admin'`,
+      [passwordHash]
+    );
+
+    return reply.status(200).send({ message: 'Contraseña reseteada exitosamente' });
   });
 }

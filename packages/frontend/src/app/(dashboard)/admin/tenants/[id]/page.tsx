@@ -17,6 +17,7 @@ interface TenantDetail {
   updatedAt: string;
   metrics: {
     userCount: number;
+    adminEmail: string;
   };
 }
 
@@ -148,6 +149,18 @@ export default function TenantDetailPage() {
       <div className="bg-white border border-gray-200 rounded-lg p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Información</h2>
         <dl className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <dt className="text-sm text-gray-500">URL de Acceso</dt>
+            <dd className="text-sm font-medium">
+              <a href={`http://${tenant.slug}.localhost:3000`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 font-mono">
+                {tenant.slug}.localhost:3000
+              </a>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-sm text-gray-500">Admin Email</dt>
+            <dd className="text-sm font-medium text-gray-900 font-mono">{tenant.metrics.adminEmail || '—'}</dd>
+          </div>
           <div>
             <dt className="text-sm text-gray-500">Plan</dt>
             <dd className="text-sm font-medium text-gray-900 capitalize">{tenant.plan}</dd>
@@ -160,16 +173,6 @@ export default function TenantDetailPage() {
             <dt className="text-sm text-gray-500">Creado</dt>
             <dd className="text-sm font-medium text-gray-900">
               {new Date(tenant.createdAt).toLocaleDateString('es-MX', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm text-gray-500">Última actualización</dt>
-            <dd className="text-sm font-medium text-gray-900">
-              {new Date(tenant.updatedAt).toLocaleDateString('es-MX', {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
@@ -189,6 +192,45 @@ export default function TenantDetailPage() {
             </div>
           )}
         </dl>
+      </div>
+
+      {/* Reset Password */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Administrar Contraseña</h2>
+        <div className="flex gap-3 items-end">
+          <div className="flex-1">
+            <label className="block text-sm text-gray-500 mb-1">Nueva contraseña para admin</label>
+            <input
+              type="text"
+              id="newPassword"
+              placeholder="Mínimo 6 caracteres"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            />
+          </div>
+          <button
+            onClick={async () => {
+              const input = document.getElementById('newPassword') as HTMLInputElement;
+              if (!input.value || input.value.length < 6) { alert('Mínimo 6 caracteres'); return; }
+              setActionLoading(true);
+              try {
+                await api(`/api/platform/tenants/${id}/reset-password`, {
+                  method: 'PUT',
+                  body: JSON.stringify({ newPassword: input.value }),
+                });
+                alert('Contraseña reseteada. Nuevo password: ' + input.value);
+                input.value = '';
+              } catch (err) {
+                alert(err instanceof Error ? err.message : 'Error');
+              } finally {
+                setActionLoading(false);
+              }
+            }}
+            disabled={actionLoading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm whitespace-nowrap"
+          >
+            Resetear
+          </button>
+        </div>
       </div>
 
       {/* Actions */}

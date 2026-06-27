@@ -11,6 +11,7 @@ interface Tenant {
   plan: string;
   status: string;
   createdAt: string;
+  adminEmail?: string;
 }
 
 interface TenantsResponse {
@@ -96,65 +97,57 @@ export default function TenantsPage() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Nombre
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Slug
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Plan
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Estado
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Creado
-              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">URL de Acceso</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Admin (Usuario)</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
-                  Cargando...
-                </td>
+                <td colSpan={5} className="px-4 py-4 text-center text-gray-500">Cargando...</td>
               </tr>
             ) : tenants.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
-                  No se encontraron tenants
-                </td>
+                <td colSpan={5} className="px-4 py-4 text-center text-gray-500">No se encontraron tenants</td>
               </tr>
             ) : (
-              tenants.map((tenant) => (
-                <tr key={tenant.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <Link
-                      href={`/admin/tenants/${tenant.id}`}
-                      className="text-sm font-medium text-blue-600 hover:text-blue-800"
-                    >
-                      {tenant.nombre}
-                    </Link>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">
-                    {tenant.slug}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 capitalize">
-                    {tenant.plan}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 py-1 text-xs font-medium rounded-full ${statusStyles[tenant.status] || 'bg-gray-100 text-gray-800'}`}
-                    >
-                      {statusLabels[tenant.status] || tenant.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(tenant.createdAt).toLocaleDateString('es-MX')}
-                  </td>
-                </tr>
-              ))
+              tenants.map((tenant) => {
+                const tenantUrl = `http://${tenant.slug}.localhost:3000`;
+                return (
+                  <tr key={tenant.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <Link
+                        href={`/admin/tenants/${tenant.id}`}
+                        className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                      >
+                        {tenant.nombre}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <a
+                        href={tenantUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-mono text-blue-600 hover:text-blue-800 underline"
+                      >
+                        {tenant.slug}.localhost:3000
+                      </a>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700 font-mono">
+                      {tenant.adminEmail || '—'}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 capitalize">{tenant.plan}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusStyles[tenant.status] || 'bg-gray-100 text-gray-800'}`}>
+                        {statusLabels[tenant.status] || tenant.status}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
