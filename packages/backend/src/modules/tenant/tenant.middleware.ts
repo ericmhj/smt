@@ -176,7 +176,8 @@ async function tenantMiddlewarePlugin(fastify: FastifyInstance): Promise<void> {
     }
 
     // Set tenant context on request
-    const schemaName = `sgr_${tenantSlug}`;
+    const sanitizedSlug = tenantSlug.replace(/-/g, '_');
+    const schemaName = `sgr_${sanitizedSlug}`;
     request.tenantContext = {
       tenantId: tenant.id,
       tenantSlug,

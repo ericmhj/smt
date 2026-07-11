@@ -8,8 +8,8 @@
 - [x] 1.5 Add `GET /api/reactivos/:id/form` route that returns `{ sanitizedHtml, jsonSchema, fieldsMetadata }` from the associated form_version
 
 ## Task 2: Backend — Property-based tests for submit
-- [ ] 2.1 Set up fast-check dependency in backend package.json (if not already present)
-- [ ] 2.2 Write property test: schema validation correctness (generate random schemas + responses, verify validateResponses accepts valid and rejects invalid with field-specific errors)
+- [x] 2.1 Set up fast-check dependency in backend package.json (if not already present)
+- [x] 2.2 Write property test: schema validation correctness (generate random schemas + responses, verify validateResponses accepts valid and rejects invalid with field-specific errors)
 - [ ] 2.3 Write property test: submit persists responses round-trip (generate valid responses, submit, query, compare)
 - [ ] 2.4 Write property test: submit transitions state to en_revision
 - [ ] 2.5 Write property test: access control rejects unauthorized users (generate users with wrong role or wrong ID)

@@ -20,6 +20,29 @@ export interface AppConfig {
     refreshTokenExpiry: string;
     issuer: string;
   };
+
+  standaloneAuth: boolean;
+
+  keycloak?: {
+    jwksUrl: string;
+    issuer: string;
+    jwksCacheTtl: number;
+  };
+
+  kafka?: {
+    brokers: string[];
+    groupId: string;
+    topic: string;
+  };
+
+  licenseService?: {
+    baseUrl: string;
+    timeoutMs: number;
+    circuitBreaker: {
+      failureThreshold: number;
+      resetTimeoutMs: number;
+    };
+  };
 }
 
 function loadKey(pathOrValue: string | undefined, envName: string): string {
@@ -37,7 +60,9 @@ function loadKey(pathOrValue: string | undefined, envName: string): string {
 }
 
 export function loadConfig(): AppConfig {
-  return {
+  const standaloneAuth = process.env.STANDALONE_AUTH !== 'false';
+
+  const config: AppConfig = {
     port: Number(process.env.PORT) || 3001,
     nodeEnv: process.env.NODE_ENV || 'development',
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -57,5 +82,58 @@ export function loadConfig(): AppConfig {
       refreshTokenExpiry: process.env.JWT_REFRESH_TOKEN_EXPIRY || '7d',
       issuer: process.env.JWT_ISSUER || 'sgr-api',
     },
+
+    standaloneAuth,
   };
+
+  if (!standaloneAuth) {
+    config.keycloak = {
+      jwksUrl: process.env.KEYCLOAK_JWKS_URL || '',
+      issuer: process.env.KEYCLOAK_ISSUER || '',
+      jwksCacheTtl: 300,
+    };
+
+    config.kafka = {
+      brokers: (process.env.KAFKA_BROKERS || '').split(',').filter(Boolean),
+      groupId: 'sgr-tenant-lifecycle',
+      topic: 'tenant.lifecycle',
+    };
+
+    config.licenseService = {
+      baseUrl: process.env.LICENSE_SERVICE_URL || '',
+      timeoutMs: 5000,
+      circuitBreaker: {
+        failureThreshold: 3,
+        resetTimeoutMs: 60000,
+      },
+    };
+  }
+
+  return config;
+}
+
+export function validateConfig(config: AppConfig): void {
+  if (config.standaloneAuth) {
+    return;
+  }
+
+  if (!config.keycloak?.jwksUrl) {
+    console.error('Variable KEYCLOAK_JWKS_URL es requerida en modo integrado');
+    process.exit(1);
+  }
+
+  if (!config.keycloak?.issuer) {
+    console.error('Variable KEYCLOAK_ISSUER es requerida en modo integrado');
+    process.exit(1);
+  }
+
+  if (!config.kafka?.brokers || config.kafka.brokers.filter((b) => b.length > 0).length === 0) {
+    console.error('Variable KAFKA_BROKERS es requerida en modo integrado');
+    process.exit(1);
+  }
+
+  if (!config.licenseService?.baseUrl) {
+    console.error('Variable LICENSE_SERVICE_URL es requerida en modo integrado');
+    process.exit(1);
+  }
 }

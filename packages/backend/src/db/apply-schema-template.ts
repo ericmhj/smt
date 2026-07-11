@@ -17,7 +17,7 @@ export async function applySchemaTemplate(
   schemaName: string,
 ): Promise<void> {
   // Validate schema name to prevent SQL injection
-  if (!/^sgr_[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/.test(schemaName)) {
+  if (!/^sgr_[a-z0-9][a-z0-9_-]{1,48}[a-z0-9]$/.test(schemaName)) {
     throw new Error(`Invalid schema name: ${schemaName}`);
   }
 

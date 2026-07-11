@@ -3,7 +3,8 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { db } from './db/index.js';
-import { loadConfig } from './lib/config.js';
+import { loadConfig, validateConfig } from './lib/config.js';
+import { createAuthStrategy } from './modules/auth/auth-strategy.factory.js';
 import { registerErrorHandler } from './lib/error-handler.js';
 import { registerSwagger } from './lib/swagger.js';
 import { helmetConfig, globalRateLimitConfig } from './lib/security.js';
@@ -28,6 +29,7 @@ import { platformRoutes } from './modules/platform/platform.routes.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const config = loadConfig();
+  validateConfig(config);
 
   const app = Fastify({
     logger: {
@@ -68,14 +70,17 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   await authService.initialize();
 
+  // Initialize auth strategy (standalone or Keycloak)
+  const authStrategy = await createAuthStrategy(config);
+
   // Register auth middleware
-  await app.register(authMiddleware, { authService });
+  await app.register(authMiddleware, { authStrategy });
 
   // Register tenant resolution middleware (after auth, before routes)
   await app.register(tenantMiddleware);
 
   // Register auth routes (with stricter rate limit)
-  await app.register(authRoutes, { authService });
+  await app.register(authRoutes, { authService, authStrategy });
 
   // Register platform admin routes (must be before tenant-scoped routes)
   await app.register(platformRoutes, { db });

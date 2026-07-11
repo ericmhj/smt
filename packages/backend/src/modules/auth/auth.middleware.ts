@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
-import type { AuthService } from './auth.service.js';
+import type { AuthStrategy } from './auth-strategy.factory.js';
 
 const PUBLIC_ROUTES: Array<{ method: string; url: string }> = [
   { method: 'POST', url: '/api/auth/login' },
@@ -9,7 +9,6 @@ const PUBLIC_ROUTES: Array<{ method: string; url: string }> = [
   { method: 'POST', url: '/api/v1/auth/refresh' },
   { method: 'GET', url: '/api/health' },
   { method: 'GET', url: '/api/docs' },
-  { method: 'GET', url: '/api/catalogs/estados' },
 ];
 
 function isPublicRoute(method: string, url: string): boolean {
@@ -20,9 +19,9 @@ function isPublicRoute(method: string, url: string): boolean {
 
 async function authMiddlewarePlugin(
   fastify: FastifyInstance,
-  opts: { authService: AuthService },
+  opts: { authStrategy: AuthStrategy },
 ): Promise<void> {
-  const { authService } = opts;
+  const { authStrategy } = opts;
 
   fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
     // Skip auth for public routes
@@ -56,7 +55,7 @@ async function authMiddlewarePlugin(
     const token = parts[1]!;
 
     try {
-      const payload = await authService.verifyToken(token);
+      const payload = await authStrategy.verifyToken(token);
       request.user = payload;
     } catch (error) {
       const authError = error as { statusCode?: number; code?: string; message?: string };

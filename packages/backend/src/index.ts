@@ -1,24 +1,64 @@
-import Fastify from 'fastify';
+import { buildApp } from './app.js';
+import { loadConfig } from './lib/config.js';
+import { TenantLifecycleConsumer } from './modules/kafka/kafka.consumer.js';
+import { TenantProvisioningService } from './modules/tenant/tenant-provisioning.service.js';
+import { db } from './db/index.js';
 
-const app = Fastify({
-  logger: true,
-});
+let kafkaConsumer: TenantLifecycleConsumer | null = null;
 
-app.get('/health', async () => {
-  return { status: 'ok', timestamp: new Date().toISOString() };
-});
+async function start(): Promise<void> {
+  const config = loadConfig();
+  const app = await buildApp();
 
-const start = async () => {
-  try {
-    const port = Number(process.env.PORT) || 3001;
-    await app.listen({ port, host: '0.0.0.0' });
-    app.log.info(`Server running on port ${port}`);
-  } catch (err) {
-    app.log.error(err);
-    process.exit(1);
+  // Conditional initialization for integrated mode
+  if (!config.standaloneAuth && config.kafka) {
+    const provisioningService = new TenantProvisioningService(db);
+
+    kafkaConsumer = new TenantLifecycleConsumer(config.kafka);
+    kafkaConsumer.setHandler(async (event) => {
+      switch (event.type) {
+        case 'tenant.created':
+          await provisioningService.provisionTenant(event);
+          break;
+        case 'tenant.suspended':
+          await provisioningService.suspendTenant(event.slug);
+          break;
+        case 'tenant.reactivated':
+          await provisioningService.reactivateTenant(event.slug);
+          break;
+      }
+    });
+
+    try {
+      await kafkaConsumer.start();
+      app.log.info('[Integración] Kafka consumer iniciado');
+    } catch (error) {
+      app.log.error('[Integración] Error iniciando Kafka consumer — el servicio continúa sin Kafka:', error);
+      // Don't crash the server if Kafka is unavailable
+      kafkaConsumer = null;
+    }
   }
-};
 
-start();
+  // Start the server
+  const port = Number(process.env.PORT) || 3001;
+  await app.listen({ port, host: '0.0.0.0' });
+  app.log.info(`Server running on port ${port}`);
 
-export { app };
+  // Graceful shutdown
+  const shutdown = async (signal: string) => {
+    app.log.info(`${signal} recibido, cerrando...`);
+    if (kafkaConsumer) {
+      await kafkaConsumer.shutdown();
+    }
+    await app.close();
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+start().catch((err) => {
+  console.error('Error fatal al iniciar:', err);
+  process.exit(1);
+});

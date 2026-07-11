@@ -1,15 +1,26 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { AuthStrategy } from './auth-strategy.factory.js';
 import { loginSchema, refreshSchema } from './auth.schemas.js';
 import type { AuthService } from './auth.service.js';
 import { AuthError } from './auth.service.js';
 
 export async function authRoutes(
   fastify: FastifyInstance,
-  opts: { authService: AuthService },
+  opts: { authService: AuthService; authStrategy: AuthStrategy },
 ): Promise<void> {
-  const { authService } = opts;
+  const { authService, authStrategy } = opts;
 
   async function handleLogin(request: FastifyRequest, reply: FastifyReply) {
+    if (!authStrategy.isLoginEnabled()) {
+      return reply.status(410).send({
+        statusCode: 410,
+        code: 'AUTH_ENDPOINT_DISABLED',
+        message: 'Este endpoint está deshabilitado en modo integrado. Utilice Keycloak para autenticación.',
+        timestamp: new Date().toISOString(),
+        requestId: request.id,
+      });
+    }
+
     const parseResult = loginSchema.safeParse(request.body);
 
     if (!parseResult.success) {
@@ -52,6 +63,16 @@ export async function authRoutes(
   fastify.post('/api/v1/auth/login', handleLogin);
 
   async function handleRefresh(request: FastifyRequest, reply: FastifyReply) {
+    if (!authStrategy.isLoginEnabled()) {
+      return reply.status(410).send({
+        statusCode: 410,
+        code: 'AUTH_ENDPOINT_DISABLED',
+        message: 'Este endpoint está deshabilitado en modo integrado. Utilice Keycloak para autenticación.',
+        timestamp: new Date().toISOString(),
+        requestId: request.id,
+      });
+    }
+
     const parseResult = refreshSchema.safeParse(request.body);
 
     if (!parseResult.success) {

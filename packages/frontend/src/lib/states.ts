@@ -35,7 +35,10 @@ export async function fetchEstados(): Promise<EstadoCatalogo[]> {
   }
 
   try {
-    const res = await fetch(`${API_URL}/api/catalogs/estados`);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_URL}/api/catalogs/estados`, { headers });
     if (res.ok) {
       const data = await res.json();
       cachedEstados = data;
