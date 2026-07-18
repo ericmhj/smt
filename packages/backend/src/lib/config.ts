@@ -24,9 +24,20 @@ export interface AppConfig {
   standaloneAuth: boolean;
 
   keycloak?: {
+    tokenUrl: string;
+    clientId: string;
+    clientSecret: string;
     jwksUrl: string;
     issuer: string;
     jwksCacheTtl: number;
+  };
+
+  keycloakAdmin?: {
+    baseUrl: string;
+    adminRealm: string;
+    adminUser: string;
+    adminPassword: string;
+    targetRealm: string;
   };
 
   kafka?: {
@@ -88,6 +99,9 @@ export function loadConfig(): AppConfig {
 
   if (!standaloneAuth) {
     config.keycloak = {
+      tokenUrl: process.env.KEYCLOAK_TOKEN_URL || '',
+      clientId: process.env.KEYCLOAK_CLIENT_ID || '',
+      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || '',
       jwksUrl: process.env.KEYCLOAK_JWKS_URL || '',
       issuer: process.env.KEYCLOAK_ISSUER || '',
       jwksCacheTtl: 300,
@@ -96,7 +110,7 @@ export function loadConfig(): AppConfig {
     config.kafka = {
       brokers: (process.env.KAFKA_BROKERS || '').split(',').filter(Boolean),
       groupId: 'sgr-tenant-lifecycle',
-      topic: 'tenant.lifecycle',
+      topic: process.env.KAFKA_TOPIC || 'license-events',
     };
 
     config.licenseService = {
@@ -107,6 +121,14 @@ export function loadConfig(): AppConfig {
         resetTimeoutMs: 60000,
       },
     };
+
+    config.keycloakAdmin = {
+      baseUrl: process.env.KEYCLOAK_ADMIN_URL || '',
+      adminRealm: process.env.KEYCLOAK_ADMIN_REALM || 'master',
+      adminUser: process.env.KEYCLOAK_ADMIN_USER || '',
+      adminPassword: process.env.KEYCLOAK_ADMIN_PASSWORD || '',
+      targetRealm: process.env.KEYCLOAK_TARGET_REALM || 'mikel-crm',
+    };
   }
 
   return config;
@@ -115,6 +137,21 @@ export function loadConfig(): AppConfig {
 export function validateConfig(config: AppConfig): void {
   if (config.standaloneAuth) {
     return;
+  }
+
+  if (!config.keycloak?.tokenUrl) {
+    console.error('Variable KEYCLOAK_TOKEN_URL es requerida en modo integrado');
+    process.exit(1);
+  }
+
+  if (!config.keycloak?.clientId) {
+    console.error('Variable KEYCLOAK_CLIENT_ID es requerida en modo integrado');
+    process.exit(1);
+  }
+
+  if (!config.keycloak?.clientSecret) {
+    console.error('Variable KEYCLOAK_CLIENT_SECRET es requerida en modo integrado');
+    process.exit(1);
   }
 
   if (!config.keycloak?.jwksUrl) {
@@ -134,6 +171,20 @@ export function validateConfig(config: AppConfig): void {
 
   if (!config.licenseService?.baseUrl) {
     console.error('Variable LICENSE_SERVICE_URL es requerida en modo integrado');
+    process.exit(1);
+  }
+
+  if (!config.keycloakAdmin?.baseUrl) {
+    console.warn('[Config] KEYCLOAK_ADMIN_URL no configurada — la creación de usuarios en Keycloak estará deshabilitada');
+  }
+
+  if (config.keycloakAdmin?.baseUrl && !config.keycloakAdmin?.adminUser) {
+    console.error('Variable KEYCLOAK_ADMIN_USER es requerida cuando KEYCLOAK_ADMIN_URL está configurada');
+    process.exit(1);
+  }
+
+  if (config.keycloakAdmin?.baseUrl && !config.keycloakAdmin?.adminPassword) {
+    console.error('Variable KEYCLOAK_ADMIN_PASSWORD es requerida cuando KEYCLOAK_ADMIN_URL está configurada');
     process.exit(1);
   }
 }

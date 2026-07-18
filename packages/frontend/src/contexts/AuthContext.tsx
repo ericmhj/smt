@@ -1,67 +1,73 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { User, getStoredUser, setAuthData, clearAuthData, isAuthenticated } from '@/lib/auth';
-import { api } from '@/lib/api';
+import { useRouter } from 'next/navigation';
+import {
+  setAuthData,
+  getAccessToken,
+  getStoredUser,
+  clearAuthData,
+  StoredUser,
+  StoredTenant,
+} from '@/lib/token-storage';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  tenantSlug: string;
+}
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (accessToken: string, user: StoredUser, tenant: StoredTenant) => void;
   logout: () => void;
+  accessToken: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     const stored = getStoredUser();
-    if (stored && isAuthenticated()) {
+    if (stored) {
       setUser(stored);
     }
-    setLoading(false);
+    setIsLoading(false);
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const data = await api<{
-      accessToken: string;
-      refreshToken: string;
-      user: { id: string; name: string; email: string; role: string };
-    }>('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-      skipAuth: true,
-    });
-
-    const user: User = {
-      id: data.user.id,
-      name: data.user.name,
-      email: data.user.email,
-      role: data.user.role,
-    };
-
-    setAuthData(data.accessToken, data.refreshToken, user);
-    setUser(user);
-  }, []);
+  const login = useCallback(
+    (accessToken: string, storedUser: StoredUser, tenant: StoredTenant) => {
+      setAuthData(accessToken, storedUser, tenant);
+      setUser(storedUser);
+    },
+    []
+  );
 
   const logout = useCallback(() => {
     clearAuthData();
     setUser(null);
-    window.location.href = '/login';
-  }, []);
+    router.push('/login');
+  }, [router]);
+
+  const accessToken = typeof window !== 'undefined' ? getAccessToken() : null;
 
   return (
     <AuthContext.Provider
       value={{
         user,
         isAuthenticated: !!user,
-        isLoading: loading,
+        isLoading,
         login,
         logout,
+        accessToken,
       }}
     >
       {children}

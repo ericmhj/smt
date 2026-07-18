@@ -37,8 +37,8 @@ export interface KafkaConfig {
   topic: string;
 }
 
-// Topic name constant
-export const TENANT_LIFECYCLE_TOPIC = 'tenant.lifecycle';
+// Topic name constant — listen to license-events (where License Service publishes)
+export const TENANT_LIFECYCLE_TOPIC = 'license-events';
 
 // Consumer group constant
 export const SGR_CONSUMER_GROUP = 'sgr-tenant-lifecycle';

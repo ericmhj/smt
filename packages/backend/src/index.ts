@@ -2,6 +2,7 @@ import { buildApp } from './app.js';
 import { loadConfig } from './lib/config.js';
 import { TenantLifecycleConsumer } from './modules/kafka/kafka.consumer.js';
 import { TenantProvisioningService } from './modules/tenant/tenant-provisioning.service.js';
+import { KeycloakAdminClient } from './modules/tenant/keycloak-admin-client.js';
 import { db } from './db/index.js';
 
 let kafkaConsumer: TenantLifecycleConsumer | null = null;
@@ -12,7 +13,20 @@ async function start(): Promise<void> {
 
   // Conditional initialization for integrated mode
   if (!config.standaloneAuth && config.kafka) {
-    const provisioningService = new TenantProvisioningService(db);
+    // Initialize Keycloak Admin Client if configured
+    let keycloakAdmin: KeycloakAdminClient | null = null;
+    if (config.keycloakAdmin?.baseUrl && config.keycloakAdmin?.adminUser) {
+      keycloakAdmin = new KeycloakAdminClient({
+        baseUrl: config.keycloakAdmin.baseUrl,
+        realm: config.keycloakAdmin.targetRealm,
+        adminRealm: config.keycloakAdmin.adminRealm,
+        adminUser: config.keycloakAdmin.adminUser,
+        adminPassword: config.keycloakAdmin.adminPassword,
+      });
+      app.log.info('[Integración] Keycloak Admin Client inicializado');
+    }
+
+    const provisioningService = new TenantProvisioningService(db, keycloakAdmin);
 
     kafkaConsumer = new TenantLifecycleConsumer(config.kafka);
     kafkaConsumer.setHandler(async (event) => {

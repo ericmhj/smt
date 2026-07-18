@@ -1,6 +1,8 @@
 import { Kafka, Consumer, EachMessagePayload, logLevel } from 'kafkajs';
 import type { KafkaConfig, TenantLifecycleEvent } from './kafka.events.js';
 
+const MAX_RETRIES = 3;
+
 /**
  * Kafka consumer for tenant lifecycle events from the License Service.
  * Listens on topic `tenant.lifecycle` with consumer group `sgr-tenant-lifecycle`.
@@ -8,6 +10,7 @@ import type { KafkaConfig, TenantLifecycleEvent } from './kafka.events.js';
  * Features:
  * - Manual offset commit (no autoCommit) — failed messages are redelivered
  * - Exponential backoff reconnection: 1s, 2s, 4s, 8s, 16s (max 5 attempts)
+ * - Retry limit per message (MAX_RETRIES) — commits offset after exhausting retries
  * - Graceful shutdown on SIGTERM/SIGINT
  * - Should NOT be initialized when STANDALONE_AUTH=true
  */
@@ -16,6 +19,9 @@ export class TenantLifecycleConsumer {
   private consumer: Consumer;
   private isRunning = false;
   private topic: string;
+
+  /** In-memory retry counter keyed by `${topic}-${partition}-${offset}` */
+  private retryMap: Map<string, number> = new Map();
 
   /** Handler injected from outside (TenantProvisioningService) */
   private handler: ((event: TenantLifecycleEvent) => Promise<void>) | null = null;
@@ -109,10 +115,40 @@ export class TenantLifecycleConsumer {
 
   /**
    * Process a single Kafka message. Commits offset only on success.
-   * On failure, offset is NOT committed so Kafka will redeliver.
+   * On failure, increments retry count. After MAX_RETRIES, commits offset
+   * and logs the message as permanently failed to prevent infinite redelivery.
    */
   private async processMessage({ topic, partition, message }: EachMessagePayload): Promise<void> {
     if (!message.value) return;
+
+    const retryKey = `${topic}-${partition}-${message.offset}`;
+    const retryCount = this.retryMap.get(retryKey) || 0;
+
+    // Check retry limit — commit offset and skip if exhausted
+    if (retryCount >= MAX_RETRIES) {
+      console.error(JSON.stringify({
+        level: 'error',
+        service: 'KafkaConsumer',
+        action: 'permanent_failure',
+        topic,
+        partition,
+        offset: message.offset,
+        retryCount,
+        message: `[KafkaConsumer] Mensaje permanentemente fallido tras ${MAX_RETRIES} reintentos. Commitiendo offset para evitar loop infinito.`,
+      }));
+
+      // Commit offset to stop redelivery
+      await this.consumer.commitOffsets([
+        {
+          topic,
+          partition,
+          offset: (BigInt(message.offset) + 1n).toString(),
+        },
+      ]);
+
+      this.retryMap.delete(retryKey);
+      return;
+    }
 
     try {
       const event = JSON.parse(message.value.toString()) as TenantLifecycleEvent;
@@ -130,12 +166,27 @@ export class TenantLifecycleConsumer {
           offset: (BigInt(message.offset) + 1n).toString(),
         },
       ]);
+
+      // Reset retry counter on success
+      this.retryMap.delete(retryKey);
     } catch (error) {
-      // Do NOT commit offset — Kafka will redeliver this message
-      console.error(
-        '[KafkaConsumer] Error procesando evento, no se confirma offset para reintento:',
-        error instanceof Error ? error.message : error,
-      );
+      // Increment retry counter
+      this.retryMap.set(retryKey, retryCount + 1);
+
+      // Structured error log with full context
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(JSON.stringify({
+        level: 'error',
+        service: 'KafkaConsumer',
+        action: 'processing_failed',
+        topic,
+        partition,
+        offset: message.offset,
+        retryCount: retryCount + 1,
+        maxRetries: MAX_RETRIES,
+        error: errorMessage,
+        message: `[KafkaConsumer] Error procesando evento (intento ${retryCount + 1}/${MAX_RETRIES}). No se confirma offset para reintento.`,
+      }));
     }
   }
 

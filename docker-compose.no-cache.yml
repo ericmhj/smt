@@ -1,0 +1,15 @@
+# Override para License Service SIN Redis/cache
+# Uso: docker compose -f docker-compose.platform.yml -f docker-compose.no-cache.yml up -d license-app license-portal
+services:
+  license-app:
+    environment:
+      SPRING_CACHE_TYPE: none
+      SPRING_DATA_REDIS_HOST: ""
+      SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+    depends_on:
+      license-postgres:
+        condition: service_healthy
+      license-kafka:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy

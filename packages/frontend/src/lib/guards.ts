@@ -1,4 +1,4 @@
-type Role = 'platform_admin' | 'superusuario' | 'admin' | 'manager' | 'tecnico' | 'asistente';
+export type Role = 'platform_admin' | 'superusuario' | 'admin' | 'manager' | 'tecnico' | 'asistente';
 
 const routePermissions: Record<string, Role[]> = {
   '/admin': ['platform_admin'],
@@ -13,6 +13,21 @@ const routePermissions: Record<string, Role[]> = {
   '/my-kanban': ['tecnico'],
 };
 
+/**
+ * Role-to-default-route mapping for post-login redirect.
+ * Each role is directed to their primary working view after login.
+ */
+const defaultRouteByRole: Record<Role, string> = {
+  platform_admin: '/admin/tenants',
+  superusuario: '/kanban',
+  admin: '/kanban',
+  manager: '/kanban',
+  tecnico: '/my-forms',
+  asistente: '/clientes',
+};
+
+const DEFAULT_FALLBACK_ROUTE = '/';
+
 export function canAccessRoute(role: Role, pathname: string): boolean {
   // Find matching route permission
   for (const [route, allowedRoles] of Object.entries(routePermissions)) {
@@ -24,20 +39,15 @@ export function canAccessRoute(role: Role, pathname: string): boolean {
   return true;
 }
 
-export function getDefaultRoute(role: Role): string {
-  switch (role) {
-    case 'platform_admin':
-      return '/admin/tenants';
-    case 'superusuario':
-    case 'admin':
-      return '/kanban';
-    case 'manager':
-      return '/kanban';
-    case 'asistente':
-      return '/clientes';
-    case 'tecnico':
-      return '/my-forms';
-    default:
-      return '/';
+/**
+ * Returns the default dashboard route for a given role.
+ * Used for post-login redirect to the appropriate role-specific view.
+ *
+ * Validates: Requirements 4.3
+ */
+export function getDefaultRoute(role: string): string {
+  if (role in defaultRouteByRole) {
+    return defaultRouteByRole[role as Role];
   }
+  return DEFAULT_FALLBACK_ROUTE;
 }

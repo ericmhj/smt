@@ -1,26 +1,9 @@
 'use client';
 
+import { getAccessToken, clearAuthData } from './token-storage';
+import { extractTenantSlug } from './tenant';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-/**
- * Extracts the tenant slug from the current browser hostname.
- * Patterns recognized:
- *   - "acme.localhost" → "acme"
- *   - "acme.sgr.com" → "acme"
- *   - "localhost" → null (uses default)
- */
-function getTenantSlugFromHost(): string | null {
-  if (typeof window === 'undefined') return null;
-  const host = window.location.hostname;
-  if (host === 'localhost' || host === '127.0.0.1') return null;
-
-  const parts = host.split('.');
-  // X.localhost
-  if (parts.length === 2 && parts[1] === 'localhost') return parts[0]!;
-  // X.domain.tld
-  if (parts.length >= 3) return parts[0]!;
-  return null;
-}
 
 interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
@@ -59,13 +42,11 @@ export async function api<T = unknown>(
   };
 
   // Add tenant slug from browser hostname
-  const tenantSlug = getTenantSlugFromHost();
-  if (tenantSlug) {
-    headers['X-Tenant-Slug'] = tenantSlug;
-  }
+  const tenantSlug = extractTenantSlug();
+  headers['X-Tenant-Slug'] = tenantSlug;
 
   if (!skipAuth) {
-    const token = localStorage.getItem('access_token');
+    const token = getAccessToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -94,9 +75,7 @@ export async function api<T = unknown>(
         headers,
       });
     } else {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user');
+      clearAuthData();
       window.location.href = '/login';
       throw new Error('Session expired');
     }
@@ -115,9 +94,13 @@ export function apiUpload<T = unknown>(
   endpoint: string,
   formData: FormData
 ): Promise<T> {
-  const token = localStorage.getItem('access_token');
+  const token = getAccessToken();
   const headers: Record<string, string> = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  // Add tenant slug to upload requests as well
+  const tenantSlug = extractTenantSlug();
+  headers['X-Tenant-Slug'] = tenantSlug;
 
   return fetch(`${API_BASE_URL}${endpoint}`, {
     method: 'POST',

@@ -3,6 +3,7 @@ import type { AuthStrategy } from './auth-strategy.factory.js';
 import { loginSchema, refreshSchema } from './auth.schemas.js';
 import type { AuthService } from './auth.service.js';
 import { AuthError } from './auth.service.js';
+import { resolveTenantSlug } from './tenant-resolver.js';
 
 export async function authRoutes(
   fastify: FastifyInstance,
@@ -35,10 +36,20 @@ export async function authRoutes(
     }
 
     try {
-      const tokenPair = await authService.login(
-        parseResult.data,
-        (request.headers['x-tenant-slug'] as string) || request.headers.host,
-      );
+      const tenantSlug = resolveTenantSlug(request);
+
+      // Integrated mode: delegate to strategy's cascade login
+      if (authStrategy.login) {
+        const result = await authStrategy.login(parseResult.data, tenantSlug);
+        return reply.status(200).send({
+          accessToken: result.accessToken,
+          user: result.user,
+          tenant: result.tenant,
+        });
+      }
+
+      // Standalone mode: delegate to authService
+      const tokenPair = await authService.login(parseResult.data, tenantSlug);
       return reply.status(200).send({
         accessToken: tokenPair.accessToken,
         refreshToken: tokenPair.refreshToken,

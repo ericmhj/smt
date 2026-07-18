@@ -30,6 +30,8 @@ export const reactivos = pgTable('reactivos', {
   rejectionReason: varchar('rejection_reason', { length: 1000 }),
   fechaProgramada: timestamp('fecha_programada', { withTimezone: true }),
   clienteNombre: varchar('cliente_nombre', { length: 255 }),
+  pdfStorageKey: varchar('pdf_storage_key', { length: 255 }),
+  downloadCount: integer('download_count').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

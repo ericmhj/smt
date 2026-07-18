@@ -2,15 +2,17 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { extractTenantSlug } from '@/lib/tenant';
+import { setAuthData } from '@/lib/token-storage';
 import { getDefaultRoute } from '@/lib/guards';
 
-function LoginForm() {
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,14 +21,29 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      await login(email, password);
-      // Redirect based on role
-      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-      document.cookie = `access_token=${localStorage.getItem('access_token')}; path=/`;
-      router.push(getDefaultRoute(storedUser.role));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
-    } finally {
+      const tenantSlug = extractTenantSlug(window.location.hostname);
+
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, tenantSlug }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        setError(errorData.message || 'Error al iniciar sesión');
+        setLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+
+      setAuthData(data.accessToken, data.user, data.tenant);
+
+      const defaultRoute = getDefaultRoute(data.user.role);
+      router.push(defaultRoute);
+    } catch {
+      setError('Error de conexión. Intente nuevamente.');
       setLoading(false);
     }
   };
@@ -41,7 +58,7 @@ function LoginForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-md">
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-md" role="alert">
               {error}
             </div>
           )}
@@ -86,13 +103,5 @@ function LoginForm() {
         </form>
       </div>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <AuthProvider>
-      <LoginForm />
-    </AuthProvider>
   );
 }

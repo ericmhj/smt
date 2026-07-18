@@ -34,3 +34,7 @@ docker-compose.override.yml
 
 # Misc
 *.tsbuildinfo
+
+.kiro
+.devcontainer
+docs

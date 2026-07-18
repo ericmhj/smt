@@ -2,7 +2,9 @@ import { buildApp } from './app.js';
 import { loadConfig } from './lib/config.js';
 import { TenantLifecycleConsumer } from './modules/kafka/kafka.consumer.js';
 import { TenantProvisioningService } from './modules/tenant/tenant-provisioning.service.js';
+import { KeycloakAdminClient } from './modules/tenant/keycloak-admin-client.js';
 import { db } from './db/index.js';
+import { deriveSlug } from './lib/slug.js';
 
 let kafkaConsumer: TenantLifecycleConsumer | null = null;
 
@@ -13,19 +15,78 @@ const start = async () => {
 
     // Conditional initialization for integrated mode
     if (!config.standaloneAuth && config.kafka) {
-      const provisioningService = new TenantProvisioningService(db);
+      // Initialize Keycloak Admin Client for user provisioning
+      let keycloakAdmin: KeycloakAdminClient | null = null;
+      console.log('[Server] Modo integrado detectado. Verificando config de Keycloak Admin...');
+      console.log(`[Server] keycloakAdmin.baseUrl = "${config.keycloakAdmin?.baseUrl || '(vacío)'}"`);
+      console.log(`[Server] keycloakAdmin.adminUser = "${config.keycloakAdmin?.adminUser || '(vacío)'}"`);
+
+      if (config.keycloakAdmin?.baseUrl && config.keycloakAdmin?.adminUser) {
+        keycloakAdmin = new KeycloakAdminClient({
+          baseUrl: config.keycloakAdmin.baseUrl,
+          realm: config.keycloakAdmin.targetRealm,
+          adminRealm: config.keycloakAdmin.adminRealm,
+          adminUser: config.keycloakAdmin.adminUser,
+          adminPassword: config.keycloakAdmin.adminPassword,
+        });
+        console.log(`[Server] KeycloakAdminClient inicializado (realm: ${config.keycloakAdmin.targetRealm})`);
+      } else {
+        console.warn('[Server] KeycloakAdminClient NO inicializado — variables KEYCLOAK_ADMIN_URL o KEYCLOAK_ADMIN_USER no configuradas');
+      }
+
+      const provisioningService = new TenantProvisioningService(db, keycloakAdmin);
 
       kafkaConsumer = new TenantLifecycleConsumer(config.kafka);
-      kafkaConsumer.setHandler(async (event) => {
-        switch (event.type) {
+      kafkaConsumer.setHandler(async (rawEvent: any) => {
+        // License Service sends DomainEvent wrapper: { eventType, payload: {...} }
+        // Or direct format: { type, tenant_id, slug, ... }
+        let eventType: string;
+        let payload: any;
+
+        if (rawEvent.eventType) {
+          // DomainEvent wrapper format
+          eventType = rawEvent.eventType;
+          payload = rawEvent.payload || rawEvent;
+        } else {
+          // Direct format
+          eventType = rawEvent.type;
+          payload = rawEvent;
+        }
+
+        // Derive slug from nombre if not present
+        if (!payload.slug && payload.nombre) {
+          payload.slug = deriveSlug(payload.nombre);
+        }
+        if (!payload.admin_email && payload.emailContacto) {
+          payload.admin_email = payload.emailContacto;
+        }
+
+        console.log(`[KafkaHandler] Processing: ${eventType}, slug: ${payload.slug || payload.tenantId}`);
+
+        switch (eventType) {
+          case 'tenant.activated':
           case 'tenant.created':
-            await provisioningService.provisionTenant(event);
+          case 'tenant.onboarded':
+            if (payload.slug || payload.nombre) {
+              await provisioningService.provisionTenant({
+                type: 'tenant.created',
+                tenant_id: payload.tenantId || payload.tenant_id || '',
+                slug: payload.slug || deriveSlug(payload.nombre),
+                nombre: payload.nombre || payload.slug || '',
+                admin_email: payload.admin_email || payload.emailContacto || 'admin@default.com',
+                timestamp: payload.occurredAt || new Date().toISOString(),
+              });
+            }
             break;
           case 'tenant.suspended':
-            await provisioningService.suspendTenant(event.slug);
+            if (payload.slug) {
+              await provisioningService.suspendTenant(payload.slug);
+            }
             break;
           case 'tenant.reactivated':
-            await provisioningService.reactivateTenant(event.slug);
+            if (payload.slug) {
+              await provisioningService.reactivateTenant(payload.slug);
+            }
             break;
         }
       });

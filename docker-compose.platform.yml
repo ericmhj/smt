@@ -1,0 +1,531 @@
+# =============================================================================
+# Plataforma Mikel Completa — Orquestador de los 4 proyectos
+# =============================================================================
+#
+# Levanta TODO en una sola línea:
+#   docker compose -f docker-compose.platform.yml up -d
+#
+# Bajar TODO:
+#   docker compose -f docker-compose.platform.yml down
+#
+# Reconstruir todo:
+#   docker compose -f docker-compose.platform.yml up -d --build
+#
+# Ver logs:
+#   docker compose -f docker-compose.platform.yml logs -f
+#
+# Destruir todo (incluyendo volúmenes):
+#   docker compose -f docker-compose.platform.yml down -v
+#
+# =============================================================================
+
+services:
+
+  # ===========================================================================
+  # 1. KEYCLOAK (Integrator)
+  # ===========================================================================
+
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: keycloak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: Kc_Pg_Dev_2026!
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    networks:
+      - keycloak-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.3
+    container_name: keycloak
+    restart: unless-stopped
+    command: >
+      start-dev
+      --import-realm
+      --log-level=INFO
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: Admin_Dev_2026!
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: Kc_Pg_Dev_2026!
+      KC_HTTP_PORT: "8080"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: "localhost"
+      KC_HOSTNAME_PORT: "8180"
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY: "none"
+      KC_CACHE: local
+      JAVA_OPTS_APPEND: "-Xms256m -Xmx768m"
+    ports:
+      - "8180:8080"
+    volumes:
+      - ../Integrator/keycloak-init:/opt/keycloak/data/import:ro
+    networks:
+      - keycloak-internal
+      - keycloak-external
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ===========================================================================
+  # 2. LICENSE SERVICE (licencesmikel)
+  # ===========================================================================
+
+  license-postgres:
+    image: postgres:16
+    container_name: license-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: license_db
+      POSTGRES_USER: license_user
+      POSTGRES_PASSWORD: license_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - license-postgres-data:/var/lib/postgresql/data
+    networks:
+      - license-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U license_user -d license_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  license-redis:
+    image: redis:7-alpine
+    container_name: license-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - license-redis-data:/data
+    networks:
+      - license-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  license-kafka:
+    image: apache/kafka:3.7.0
+    container_name: license-kafka
+    restart: unless-stopped
+    ports:
+      - "9093:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://license-kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 8
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    networks:
+      - license-network
+      - mikel-net
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+  license-kafka-init:
+    image: apache/kafka:3.7.0
+    container_name: license-kafka-init
+    depends_on:
+      license-kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Creando topics de Kafka..."
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server license-kafka:9092 --create --if-not-exists --topic tenant.lifecycle --partitions 4 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server license-kafka:9092 --create --if-not-exists --topic license.events --partitions 4 --replication-factor 1
+        echo "Topics creados:"
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server license-kafka:9092 --list
+    networks:
+      - license-network
+      - mikel-net
+    restart: "no"
+
+  license-app:
+    build:
+      context: ../licencesmikel/license-service
+      dockerfile: Dockerfile
+    container_name: license-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_URL: jdbc:postgresql://license-postgres:5432/license_db
+      SPRING_DATASOURCE_USERNAME: license_user
+      SPRING_DATASOURCE_PASSWORD: license_pass
+      SPRING_DATA_REDIS_HOST: license-redis
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: license-kafka:9092
+      LICENSE_SERVICE_JWT_TRUST_GATEWAY_HEADERS: "true"
+      LICENSE_SERVICE_JWT_KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/mikel-crm/protocol/openid-connect/certs
+      MAIL_HOST: smtp.hostinger.com
+      MAIL_PORT: 465
+      MAIL_USERNAME: admin@normalia.com.mx
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-changeme}
+    depends_on:
+      license-postgres:
+        condition: service_healthy
+      license-redis:
+        condition: service_healthy
+      license-kafka:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - license-network
+      - mikel-net
+      - keycloak-external
+
+  license-portal:
+    build:
+      context: ../licencesmikel/portal-contratacion
+      dockerfile: Dockerfile
+    container_name: license-portal
+    restart: unless-stopped
+    ports:
+      - "4200:4200"
+    depends_on:
+      license-app:
+        condition: service_healthy
+    networks:
+      - license-network
+
+  # ===========================================================================
+  # 3. APISIX (Gateway)
+  # ===========================================================================
+
+  apisix-etcd:
+    image: quay.io/coreos/etcd:v3.5.12
+    container_name: apisix-etcd
+    restart: unless-stopped
+    command:
+      - etcd
+      - --advertise-client-urls=http://apisix-etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd-data
+    volumes:
+      - apisix-etcd-data:/etcd-data
+    networks:
+      - apisix-internal
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health", "--endpoints=http://localhost:2379"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  apisix:
+    image: apache/apisix:3.9.0-debian
+    container_name: apisix
+    restart: unless-stopped
+    volumes:
+      - ../apisix/apisix-config/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ../apisix/apisix-config/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+      - ../apisix/apisix-config/certs:/usr/local/apisix/certs:ro
+    ports:
+      - "9080:9080"
+      - "9443:9443"
+      - "9091:9091"
+      - "9180:9180"
+    networks:
+      - apisix-internal
+      - keycloak-external
+      - mikel-net
+    depends_on:
+      apisix-etcd:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      license-app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ===========================================================================
+  # 4. SMT (SGR Backend + Frontend)
+  # ===========================================================================
+
+  sgr-postgres:
+    image: postgres:16-alpine
+    container_name: sgr-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: sgr
+      POSTGRES_PASSWORD: sgr_dev_password
+      POSTGRES_DB: sgr_dev
+    volumes:
+      - sgr-postgres-data:/var/lib/postgresql/data
+      - ./packages/backend/src/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    networks:
+      - sgr-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sgr -d sgr_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  sgr-redis:
+    image: redis:7-alpine
+    container_name: sgr-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass sgr_redis_dev
+    volumes:
+      - sgr-redis-data:/data
+    networks:
+      - sgr-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "sgr_redis_dev", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  sgr-garage:
+    image: dxflrs/garage:v1.0.1
+    container_name: sgr-garage
+    restart: unless-stopped
+    ports:
+      - "3900:3900"
+      - "3903:3903"
+    volumes:
+      - sgr-garage-meta:/var/lib/garage/meta
+      - sgr-garage-data:/var/lib/garage/data
+      - ./config/garage.toml:/etc/garage.toml:ro
+    networks:
+      - sgr-network
+
+  sgr-garage-init:
+    image: alpine:3.19
+    container_name: sgr-garage-init
+    depends_on:
+      - sgr-garage
+    volumes:
+      - ./config/garage-init.sh:/init.sh:ro
+    entrypoint: ["sh", "/init.sh"]
+    networks:
+      - sgr-network
+    restart: "no"
+
+  sgr-clamav:
+    image: clamav/clamav:stable
+    container_name: sgr-clamav
+    restart: unless-stopped
+    ports:
+      - "3310:3310"
+    volumes:
+      - sgr-clamav-data:/var/lib/clamav
+    networks:
+      - sgr-network
+    healthcheck:
+      test: ["CMD", "clamdcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  sgr-jwt-keygen:
+    image: alpine:3.19
+    container_name: sgr-jwt-keygen
+    command: >
+      sh -c '
+        if [ ! -f /keys/private.pem ]; then
+          apk add --no-cache openssl &&
+          openssl genrsa -out /keys/private.pem 2048 &&
+          openssl rsa -in /keys/private.pem -pubout -out /keys/public.pem &&
+          chmod 644 /keys/*.pem &&
+          echo "JWT keys generated."
+        else
+          echo "JWT keys already exist, skipping."
+        fi
+      '
+    volumes:
+      - sgr-jwt-keys:/keys
+    networks:
+      - sgr-network
+    restart: "no"
+
+  sgr-backend:
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+    container_name: sgr-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: "3001"
+      FRONTEND_URL: http://localhost:3000
+      DATABASE_URL: postgresql://sgr:sgr_dev_password@sgr-postgres:5432/sgr_dev
+      REDIS_URL: redis://:sgr_redis_dev@sgr-redis:6379
+      MINIO_ENDPOINT: http://sgr-garage:3900
+      MINIO_ACCESS_KEY: GKed5537444c2e84eb01b9fa34
+      MINIO_SECRET_KEY: 85dc8299f8dfde6f3ca5549fd3380c799df0c123936bd37795a5d1eb04f55246
+      MINIO_BUCKET: sgr-files
+      MINIO_USE_SSL: "false"
+      MINIO_REGION: garage
+      CLAMAV_HOST: sgr-clamav
+      CLAMAV_PORT: "3310"
+      CLAMAV_TIMEOUT: "30000"
+      JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
+      JWT_ACCESS_TOKEN_EXPIRY: 15m
+      JWT_REFRESH_TOKEN_EXPIRY: 7d
+      JWT_ISSUER: sgr-api
+      SIGNATURE_HMAC_SECRET: dev-hmac-secret-change-in-production
+      MAX_FILE_SIZE_MB: "10"
+      LOG_LEVEL: debug
+      # --- Modo integrado ---
+      STANDALONE_AUTH: "false"
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/mikel-crm/protocol/openid-connect/certs
+      KEYCLOAK_ISSUER: http://keycloak:8080/realms/mikel-crm
+      KAFKA_BROKERS: license-kafka:9092
+      LICENSE_SERVICE_URL: http://license-app:8080
+    volumes:
+      - sgr-jwt-keys:/app/keys
+    depends_on:
+      sgr-postgres:
+        condition: service_healthy
+      sgr-redis:
+        condition: service_healthy
+      sgr-garage-init:
+        condition: service_completed_successfully
+      sgr-jwt-keygen:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+      license-kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3001/api/health').then(r => { if(!r.ok) process.exit(1) }).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - sgr-network
+      - mikel-net
+      - keycloak-external
+
+  sgr-frontend:
+    build:
+      context: .
+      dockerfile: packages/frontend/Dockerfile
+    container_name: sgr-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_AUTH_MODE: keycloak
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: dev-secret-change-in-production
+      KEYCLOAK_CLIENT_ID: mikel-crm-test
+      KEYCLOAK_CLIENT_SECRET: test-client-secret-dev
+      KEYCLOAK_ISSUER: http://keycloak:8080/realms/mikel-crm
+      KEYCLOAK_ISSUER_EXTERNAL: http://localhost:8180/realms/mikel-crm
+    depends_on:
+      - sgr-backend
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000').then(r => { if(!r.ok) process.exit(1) }).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - sgr-network
+      - keycloak-external
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  # Keycloak interna (BD)
+  keycloak-internal:
+    driver: bridge
+    internal: true
+
+  # Keycloak compartida (todos los módulos acceden)
+  keycloak-external:
+    driver: bridge
+
+  # License Service interna
+  license-network:
+    driver: bridge
+
+  # Red compartida entre módulos (License ↔ SGR ↔ APISIX)
+  mikel-net:
+    driver: bridge
+
+  # APISIX interna (etcd)
+  apisix-internal:
+    driver: bridge
+    internal: true
+
+  # SGR interna
+  sgr-network:
+    driver: bridge
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  keycloak-db-data:
+  license-postgres-data:
+  license-redis-data:
+  apisix-etcd-data:
+  sgr-postgres-data:
+  sgr-redis-data:
+  sgr-garage-meta:
+  sgr-garage-data:
+  sgr-clamav-data:
+  sgr-jwt-keys:

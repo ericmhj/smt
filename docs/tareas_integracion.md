@@ -277,3 +277,95 @@ Wave 17: 11.2                        (wiring index.ts)
 Tareas sin `*` = requeridas (~22 tareas)
 Tareas con `*` = opcionales/tests (~15 tareas)
 **Total: ~37 tareas en 18 waves**
+
+
+---
+
+## Fase 8: Control de Créditos con PDF (Generación + Descargas)
+
+**Modelo de negocio:** 1 crédito al generar/submit + N descargas gratis + cobro al N+1 (reinicia contador)
+
+### Contexto
+- El PDF se genera con Puppeteer al hacer submit del ensayo
+- Actualmente se regenera on-demand cada vez que se descarga (sin caché, sin contador)
+- N es configurable por plan: PLAN_BASICO=3, PLAN_PRO=10, PLAN_ENTERPRISE=∞
+
+### Tareas
+
+- [ ] 13.1 Agregar campo `pdf_storage_key` y `download_count` a tabla `reactivos`
+  - Migración SQL: `ALTER TABLE reactivos ADD COLUMN pdf_storage_key VARCHAR(255), ADD COLUMN download_count INTEGER DEFAULT 0`
+  - `pdf_storage_key` almacena la key en Garage S3 del PDF generado
+  - `download_count` se incrementa en cada descarga
+
+- [ ] 13.2 Almacenar PDF en Garage S3 al momento del submit
+  - En `ReactivoService.submit()`, después de transicionar estado a `en_revision`:
+    1. Generar PDF con `PDFService.generate()`
+    2. Subir a Garage S3 con key `{tenantSlug}/pdfs/{reactivoId}.pdf`
+    3. Guardar `pdf_storage_key` en el reactivo
+  - El PDF se genera UNA sola vez (no en cada descarga)
+
+- [ ] 13.3 Integrar consumo de crédito al submit (primera generación)
+  - Antes de generar el PDF, llamar a `PdfCreditService.validateBeforeGeneration()`
+  - Si `approved` → generar y almacenar
+  - Si `insufficient` → retornar 402 al usuario
+  - Si `deferred` (circuit breaker) → generar y registrar deuda
+  - Solo aplica en modo integrado (`STANDALONE_AUTH=false`)
+
+- [ ] 13.4 Modificar endpoint `GET /api/reactivos/:id/pdf` para servir desde S3
+  - Si `pdf_storage_key` existe → descargar de Garage S3 (no regenerar)
+  - Si no existe (legacy) → generar on-demand como antes (sin cobrar)
+  - Incrementar `download_count` en cada descarga
+
+- [ ] 13.5 Implementar lógica de cobro al N+1 descargas
+  - Configuración de N por plan (nueva tabla o config):
+    ```
+    PLAN_BASICO: max_free_downloads = 3
+    PLAN_PRO: max_free_downloads = 10
+    PLAN_ENTERPRISE: max_free_downloads = -1 (ilimitado)
+    ```
+  - En el endpoint GET /pdf, antes de servir:
+    1. Obtener `download_count` del reactivo
+    2. Obtener `max_free_downloads` del plan del tenant
+    3. Si `download_count >= max_free_downloads` → consumir crédito via CreditClient
+    4. Si crédito aprobado → resetear `download_count = 0`, servir PDF
+    5. Si crédito insuficiente → retornar 402
+  - En modo standalone o PLAN_ENTERPRISE → servir siempre sin cobrar
+
+- [ ] 13.6 Crear tabla/config de límites por plan
+  - Opción A: tabla `platform.plan_limits` con columns (plan_type, max_free_downloads, ...)
+  - Opción B: config en License Service (endpoint GET /plans/{plan}/limits)
+  - Opción C: hardcoded en config del SGR por ahora (iterar después)
+  - _Decisión: empezar con Opción C (hardcoded) e iterar_
+
+- [ ] 13.7 Agregar header `X-Downloads-Remaining` en respuesta del PDF
+  - Informar al cliente cuántas descargas gratuitas le quedan
+  - `X-Downloads-Remaining: 7` (de 10)
+  - Cuando sea 0: el próximo download cobrará
+
+### Dependencias
+- Requiere: Fase 5 (Credit Client implementado) ✅ ya existe
+- Requiere: Garage S3 configurado ✅ ya existe
+- Requiere: `PdfCreditService` ✅ ya existe
+- Requiere: `CreditClient` con circuit breaker ✅ ya existe
+
+### Diagrama de flujo
+
+```
+Submit (técnico)
+  │
+  ├── CreditClient.consume() → License Service
+  │     ├── 200 OK → continuar
+  │     ├── 402 → cancelar submit (sin créditos)
+  │     └── timeout/CB → generar con deuda
+  │
+  ├── PDFService.generate() → Buffer
+  ├── Upload a Garage S3 → pdf_storage_key
+  └── Guardar en DB (responses + state + pdf_storage_key)
+
+GET /pdf (descarga)
+  │
+  ├── download_count < N → servir desde S3 gratis, download_count++
+  └── download_count >= N → CreditClient.consume()
+        ├── 200 OK → resetear contador, servir PDF
+        └── 402 → rechazar descarga
+```

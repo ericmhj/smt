@@ -7,12 +7,17 @@ import { tenants } from '../../db/schema/platform.js';
 import { applySchemaTemplate } from '../../db/apply-schema-template.js';
 import { getRedisClient } from '../../lib/redis.js';
 import type { TenantCreatedEvent } from '../kafka/kafka.events.js';
+import type { KeycloakAdminClient } from './keycloak-admin-client.js';
+
+const SCHEMA_NAME_REGEX = /^sgr_[a-z0-9][a-z0-9_-]{1,48}[a-z0-9]$/;
 
 export class TenantProvisioningService {
   private db: Database;
+  private keycloakAdmin: KeycloakAdminClient | null;
 
-  constructor(db: Database) {
+  constructor(db: Database, keycloakAdmin?: KeycloakAdminClient | null) {
     this.db = db;
+    this.keycloakAdmin = keycloakAdmin || null;
   }
 
   async provisionTenant(event: TenantCreatedEvent): Promise<void> {
@@ -20,6 +25,20 @@ export class TenantProvisioningService {
     // Sanitize slug for PostgreSQL schema name: replace hyphens with underscores
     const sanitizedSlug = slug.replace(/-/g, '_');
     const schemaName = `sgr_${sanitizedSlug}`;
+
+    // Pre-validate schema name BEFORE any DB operation (prevents orphaned schemas)
+    if (!SCHEMA_NAME_REGEX.test(schemaName)) {
+      const errorMsg = `[TenantProvisioning] Schema name inválido: '${schemaName}' (slug: '${slug}'). No se ejecutará CREATE SCHEMA.`;
+      console.error(JSON.stringify({
+        level: 'error',
+        service: 'TenantProvisioning',
+        step: 'pre-validation',
+        slug,
+        schemaName,
+        message: errorMsg,
+      }));
+      throw new Error(errorMsg);
+    }
 
     // Check idempotency: if tenant already exists, skip
     const existing = await this.db
@@ -35,29 +54,77 @@ export class TenantProvisioningService {
 
     const sql = getSqlClient();
 
-    // 1. Create the schema
-    await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
+    // Wrap ALL provisioning steps in a single transaction for atomicity.
+    // If any step fails, the transaction rolls back (including CREATE SCHEMA).
+    try {
+      await sql.begin(async (tx) => {
+        // 1. Create the schema
+        await tx.unsafe(`CREATE SCHEMA ${schemaName}`);
 
-    // 2. Apply schema template (creates all tables)
-    await applySchemaTemplate(sql, schemaName);
+        // 2. Apply schema template (creates all tables)
+        await applySchemaTemplate(tx, schemaName);
 
-    // 3. Create tenant record in platform.tenants
-    await this.db.insert(tenants).values({
-      id: randomUUID(),
-      slug,
-      nombre,
-      status: 'active',
-    });
+        // 3. Create tenant record in platform.tenants
+        const tenantId = randomUUID();
+        await tx`
+          INSERT INTO public.tenants (id, slug, nombre, status)
+          VALUES (${tenantId}, ${slug}, ${nombre}, 'active')
+        `;
 
-    // 4. Create admin user in the tenant schema
-    const hashedPassword = await bcrypt.hash('admin123', 10);
-    await sql.unsafe(`
-      INSERT INTO ${schemaName}.users (id, name, email, password_hash, role, is_active)
-      VALUES ('${randomUUID()}', 'Admin', '${admin_email}', '${hashedPassword}', 'admin', true)
-      ON CONFLICT (email) DO NOTHING
-    `);
+        // 4. Create admin user in the tenant schema
+        const hashedPassword = await bcrypt.hash('admin123', 10);
+        const userId = randomUUID();
+        await tx.unsafe(`SET search_path TO ${schemaName}, public`);
+        await tx`
+          INSERT INTO users (id, name, email, password_hash, role, is_active)
+          VALUES (${userId}, 'Admin', ${admin_email}, ${hashedPassword}, 'admin', true)
+          ON CONFLICT (email) DO NOTHING
+        `;
 
-    console.log(`[TenantProvisioning] Tenant '${slug}' provisionado exitosamente`);
+        // Reset search_path
+        await tx.unsafe(`SET search_path TO public`);
+      });
+
+      console.log(`[TenantProvisioning] Tenant '${slug}' provisionado exitosamente (schema: ${schemaName})`);
+
+      // 5. Create admin user in Keycloak (non-blocking)
+      console.log(`[TenantProvisioning] Paso 5: Intentando crear usuario en Keycloak para '${admin_email}'...`);
+      console.log(`[TenantProvisioning] keycloakAdmin disponible: ${!!this.keycloakAdmin}`);
+      if (this.keycloakAdmin) {
+        try {
+          console.log(`[TenantProvisioning] Llamando keycloakAdmin.createUser({ email: '${admin_email}', tenantSlug: '${slug}', role: 'admin' })`);
+          await this.keycloakAdmin.createUser({
+            email: admin_email,
+            password: 'admin123',
+            temporary: false,
+            tenantSlug: slug,
+            role: 'admin',
+          });
+          console.log(`[TenantProvisioning] Usuario '${admin_email}' creado en Keycloak exitosamente`);
+        } catch (keycloakError) {
+          const kcErrorMsg = keycloakError instanceof Error ? keycloakError.message : 'Error desconocido';
+          console.error(`[TenantProvisioning] Error creando usuario en Keycloak (no-bloqueante): ${kcErrorMsg}`);
+        }
+      } else {
+        console.warn(`[TenantProvisioning] KeycloakAdminClient no disponible — usuario '${admin_email}' NO creado en Keycloak`);
+      }
+    } catch (error) {
+      // Structured error logging for operator diagnosis
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      console.error(JSON.stringify({
+        level: 'error',
+        service: 'TenantProvisioning',
+        step: 'transaction',
+        slug,
+        schemaName,
+        eventType: event.type,
+        error: errorMessage,
+        message: `[TenantProvisioning] Error provisionando tenant '${slug}': ${errorMessage}`,
+      }));
+
+      // Re-throw so caller (Kafka consumer) can handle retry logic
+      throw error;
+    }
   }
 
   async suspendTenant(slug: string): Promise<void> {

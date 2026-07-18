@@ -29,7 +29,7 @@ function tecnicoActorArb(sub?: string): fc.Arbitrary<JWTPayload> {
 }
 
 /** Generate a non-tecnico role */
-const nonTecnicoRoleArb = fc.constantFrom('admin', 'supervisor', 'cliente', 'asistente', 'viewer');
+const nonTecnicoRoleArb = fc.constantFrom('admin', 'manager', 'asistente', 'superusuario');
 
 /** Generate a non-tecnico actor */
 const nonTecnicoActorArb = fc.record({

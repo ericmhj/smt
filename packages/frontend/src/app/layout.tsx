@@ -13,7 +13,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        {/* AuthProvider will be added in a subsequent task (8.1) */}
+        {children}
+      </body>
     </html>
   );
 }
