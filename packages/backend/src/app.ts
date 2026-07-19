@@ -26,6 +26,7 @@ import { clienteRoutes } from './modules/clientes/cliente.routes.js';
 import { documentoRoutes } from './modules/clientes/documento.routes.js';
 import { ticketRoutes } from './modules/tickets/ticket.routes.js';
 import { platformRoutes } from './modules/platform/platform.routes.js';
+import { KeycloakAdminClient } from './modules/tenant/keycloak-admin-client.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const config = loadConfig();
@@ -86,7 +87,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(platformRoutes, { db });
 
   // Register user routes
-  await app.register(userRoutes, { db });
+  const keycloakAdmin = new KeycloakAdminClient({
+    baseUrl: config.keycloakAdmin?.baseUrl ?? '',
+    realm: config.keycloakAdmin?.targetRealm ?? '',
+    adminRealm: config.keycloakAdmin?.adminRealm ?? 'master',
+    adminUser: config.keycloakAdmin?.adminUser ?? '',
+    adminPassword: config.keycloakAdmin?.adminPassword ?? '',
+  });
+  await app.register(userRoutes, { keycloakAdmin });
 
   // Register form routes
   await app.register(formRoutes, { db });

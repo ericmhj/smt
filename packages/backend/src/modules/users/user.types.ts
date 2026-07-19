@@ -4,14 +4,14 @@ export interface CreateUserDTO {
   email: string;
   password: string;
   name: string;
-  role: Role;
+  roles: Role[];
 }
 
 export interface UpdateUserDTO {
   email?: string;
   password?: string;
   name?: string;
-  role?: Role;
+  roles?: Role[];
   isActive?: boolean;
 }
 
@@ -19,7 +19,7 @@ export interface UserResponse {
   id: string;
   email: string;
   name: string;
-  role: Role;
+  roles: Role[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

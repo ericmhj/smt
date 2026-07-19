@@ -34,7 +34,11 @@ function isPlatformRoute(url: string): boolean {
 function isPublicRoute(url: string): boolean {
   return (
     url.startsWith('/api/health') ||
-    url.startsWith('/api/docs')
+    url.startsWith('/api/docs') ||
+    url.startsWith('/api/auth/login') ||
+    url.startsWith('/api/v1/auth/login') ||
+    url.startsWith('/api/auth/refresh') ||
+    url.startsWith('/api/v1/auth/refresh')
   );
 }
 
@@ -125,7 +129,7 @@ async function tenantMiddlewarePlugin(fastify: FastifyInstance): Promise<void> {
     // Platform routes: set search_path to public only, no tenant resolution needed
     if (isPlatformRoute(request.url)) {
       const sql = getSqlClient();
-      await sql.unsafe(`SET search_path TO public`);
+      await sql.unsafe(`SET LOCAL search_path TO public`);
       return;
     }
 
@@ -184,19 +188,9 @@ async function tenantMiddlewarePlugin(fastify: FastifyInstance): Promise<void> {
       schemaName,
     };
 
-    // Set search_path for the connection
+    // Set search_path for this session
     const sql = getSqlClient();
     await sql.unsafe(`SET search_path TO ${schemaName}, public`);
-  });
-
-  // onResponse hook: reset search_path after request completes
-  fastify.addHook('onResponse', async () => {
-    try {
-      const sql = getSqlClient();
-      await sql.unsafe(`SET search_path TO public`);
-    } catch {
-      // Connection may already be released
-    }
   });
 }
 

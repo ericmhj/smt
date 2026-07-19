@@ -6,7 +6,8 @@ export interface UserRow {
   id: string;
   email: string;
   name: string;
-  role: string;
+  role?: string;
+  roles?: string[];
   isActive: boolean;
   createdAt: string;
 }
@@ -41,7 +42,7 @@ export default function UserTable({ users, onToggleActive }: UserTableProps) {
             <tr key={user.id}>
               <td className="px-4 py-3 text-sm text-gray-900">{user.name}</td>
               <td className="px-4 py-3 text-sm text-gray-500">{user.email}</td>
-              <td className="px-4 py-3 text-sm text-gray-500">{roleLabels[user.role] || user.role}</td>
+              <td className="px-4 py-3 text-sm text-gray-500">{roleLabels[user.roles?.[0] ?? user.role ?? ''] || user.roles?.[0] || user.role || ''}</td>
               <td className="px-4 py-3">
                 <span
                   className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${

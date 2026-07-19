@@ -107,5 +107,6 @@ export function clearAuthData(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(TENANT_KEY);
+  localStorage.removeItem('refresh_token');
   removeCookie(COOKIE_NAME);
 }

@@ -40,6 +40,11 @@ export default function LoginPage() {
 
       setAuthData(data.accessToken, data.user, data.tenant);
 
+      // Store refresh token for automatic token renewal
+      if (data.refreshToken) {
+        localStorage.setItem('refresh_token', data.refreshToken);
+      }
+
       const defaultRoute = getDefaultRoute(data.user.role);
       router.push(defaultRoute);
     } catch {

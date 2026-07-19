@@ -5,9 +5,11 @@ import UserForm from '@/components/users/UserForm';
 
 export default function NewUserPage() {
   const handleSubmit = async (data: { email: string; name: string; password?: string; role: string }) => {
+    // Backend expects roles[] array instead of single role string
+    const { role, ...rest } = data;
     await api('/api/users', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...rest, roles: [role] }),
     });
   };
 

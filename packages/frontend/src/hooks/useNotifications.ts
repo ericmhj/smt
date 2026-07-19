@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getAccessToken } from '@/lib/auth';
+import { extractTenantSlug } from '@/lib/tenant';
 
 export interface Notification {
   id: string;
@@ -15,51 +16,72 @@ export interface Notification {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+function buildHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = getAccessToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  headers['X-Tenant-Slug'] = extractTenantSlug();
+  return headers;
+}
+
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchNotifications = useCallback(async () => {
     const token = getAccessToken();
-    if (!token) return;
+    if (!token) return false;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/notifications`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers = buildHeaders();
+
+      const res = await fetch(`${API_BASE_URL}/api/notifications`, { headers });
+
+      // Stop polling if auth fails
+      if (res.status === 401 || res.status === 403) return false;
+
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.data || []);
       }
 
-      const countRes = await fetch(`${API_BASE_URL}/api/notifications/unread-count`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const countRes = await fetch(`${API_BASE_URL}/api/notifications/unread-count`, { headers });
+
+      if (countRes.status === 401 || countRes.status === 403) return false;
+
       if (countRes.ok) {
         const countData = await countRes.json();
         setUnreadCount(countData.count || 0);
       }
+      return true;
     } catch {
-      // ignore
+      return true; // network error, keep trying
     }
   }, []);
 
   useEffect(() => {
     fetchNotifications();
 
-    // Poll for new notifications every 30 seconds (SSE disabled for now)
-    const interval = setInterval(fetchNotifications, 30000);
+    // Poll for new notifications every 30 seconds, stop on auth failure
+    const interval = setInterval(async () => {
+      const success = await fetchNotifications();
+      if (success === false) {
+        clearInterval(interval);
+      }
+    }, 30000);
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
   const markAsRead = useCallback(async (id: string) => {
-    const token = getAccessToken();
-    if (!token) return;
+    const headers = buildHeaders();
+    if (!headers['Authorization']) return;
 
     try {
       await fetch(`${API_BASE_URL}/api/notifications/${id}/read`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
       });
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))

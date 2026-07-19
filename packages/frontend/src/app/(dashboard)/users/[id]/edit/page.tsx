@@ -14,6 +14,10 @@ export default function EditUserPage() {
     const fetchUser = async () => {
       try {
         const data = await api<Record<string, unknown>>(`/api/users/${params.id}`);
+        // Backend returns roles[] array; map to single role for the form
+        if (Array.isArray(data.roles) && data.roles.length > 0) {
+          data.role = data.roles[0];
+        }
         setUserData(data);
       } catch {
         setUserData(null);
@@ -25,9 +29,11 @@ export default function EditUserPage() {
   }, [params.id]);
 
   const handleSubmit = async (data: { email: string; name: string; password?: string; role: string }) => {
+    // Backend expects roles[] array instead of single role string
+    const { role, ...rest } = data;
     await api(`/api/users/${params.id}`, {
       method: 'PATCH',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...rest, roles: [role] }),
     });
   };
 

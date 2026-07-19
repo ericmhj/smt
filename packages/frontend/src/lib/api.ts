@@ -14,9 +14,13 @@ async function refreshToken(): Promise<string | null> {
   if (!refresh) return null;
 
   try {
+    const tenantSlug = extractTenantSlug();
     const res = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Tenant-Slug': tenantSlug,
+      },
       body: JSON.stringify({ refreshToken: refresh }),
     });
 
@@ -24,7 +28,11 @@ async function refreshToken(): Promise<string | null> {
 
     const data = await res.json();
     localStorage.setItem('access_token', data.accessToken);
-    localStorage.setItem('refresh_token', data.refreshToken);
+    if (data.refreshToken) {
+      localStorage.setItem('refresh_token', data.refreshToken);
+    }
+    // Update the cookie so Next.js middleware sees the new token
+    document.cookie = `sgr-token=${encodeURIComponent(data.accessToken)}; path=/; SameSite=Lax`;
     return data.accessToken;
   } catch {
     return null;

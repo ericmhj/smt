@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import type { AuthStrategy } from './auth-strategy.factory.js';
+import { resolveTenantSlug } from './tenant-resolver.js';
 
 const PUBLIC_ROUTES: Array<{ method: string; url: string }> = [
   { method: 'POST', url: '/api/auth/login' },
@@ -56,9 +57,20 @@ async function authMiddlewarePlugin(
 
     try {
       const payload = await authStrategy.verifyToken(token);
+
+      // Enrich tenantSlug from request headers/subdomain when JWT doesn't include it
+      // (Keycloak tokens don't carry tenantSlug, so we resolve from X-Tenant-Slug header or subdomain)
+      if (!payload.tenantSlug) {
+        payload.tenantSlug = resolveTenantSlug(request);
+      }
+
       request.user = payload;
     } catch (error) {
       const authError = error as { statusCode?: number; code?: string; message?: string };
+      fastify.log.warn(
+        { err: error, url: request.url, reqId: request.id },
+        '[AuthMiddleware] Token verification failed',
+      );
       return reply.status(authError.statusCode || 401).send({
         statusCode: authError.statusCode || 401,
         code: authError.code || 'AUTH_003',

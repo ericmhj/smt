@@ -25,6 +25,7 @@ export interface IntegratedAuthConfig {
 
 export interface CascadeLoginResult {
   accessToken: string;
+  refreshToken: string;
   user: {
     id: string;
     name: string;
@@ -86,7 +87,10 @@ export class IntegratedAuthStrategy implements AuthStrategy {
         (payload.realm_access as { roles: string[] })?.roles ||
         [];
 
-      const role = roles[0] || 'tecnico';
+      // Filter out Keycloak internal roles, keep only application roles
+      const APP_ROLES = ['platform_admin', 'superusuario', 'admin', 'manager', 'tecnico', 'asistente'];
+      const appRoles = roles.filter((r) => APP_ROLES.includes(r));
+      const role = appRoles[0] || roles[0] || 'tecnico';
 
       return {
         sub: payload.sub as string,
@@ -172,6 +176,7 @@ export class IntegratedAuthStrategy implements AuthStrategy {
 
     return {
       accessToken: tokenResponse.access_token,
+      refreshToken: tokenResponse.refresh_token,
       user: {
         id: claims.sub,
         name: claims.name || '',
@@ -185,5 +190,12 @@ export class IntegratedAuthStrategy implements AuthStrategy {
         plan: tenant.plan,
       },
     };
+  }
+
+  /**
+   * Refreshes a Keycloak token using the refresh_token grant type.
+   */
+  async refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+    return this.keycloakClient.refreshToken(refreshToken);
   }
 }

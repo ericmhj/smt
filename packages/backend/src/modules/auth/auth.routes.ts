@@ -43,6 +43,7 @@ export async function authRoutes(
         const result = await authStrategy.login(parseResult.data, tenantSlug);
         return reply.status(200).send({
           accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
           user: result.user,
           tenant: result.tenant,
         });
@@ -98,6 +99,16 @@ export async function authRoutes(
     }
 
     try {
+      // Integrated mode: delegate refresh to Keycloak via strategy
+      if (authStrategy.refreshToken) {
+        const result = await authStrategy.refreshToken(parseResult.data.refreshToken);
+        return reply.status(200).send({
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+        });
+      }
+
+      // Standalone mode: delegate to authService
       const tokenPair = await authService.refresh(parseResult.data.refreshToken);
       return reply.status(200).send({
         accessToken: tokenPair.accessToken,

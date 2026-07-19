@@ -25,6 +25,13 @@ export interface AuthStrategy {
    * Optional — only implemented by strategies that support login.
    */
   login?(credentials: LoginDTO, tenantSlug: string): Promise<CascadeLoginResult>;
+
+  /**
+   * Refresh an access token using a refresh token.
+   * In integrated mode, delegates to Keycloak's token endpoint.
+   * Optional — only implemented by strategies that support refresh.
+   */
+  refreshToken?(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }>;
 }
 
 /**

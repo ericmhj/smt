@@ -3,13 +3,13 @@ import { UserService } from './user.service.js';
 import { UserError } from './user.errors.js';
 import { requireRole } from './rbac.middleware.js';
 import { createUserSchema, updateUserSchema, userFiltersSchema } from './user.schemas.js';
-import type { Database } from '../../db/index.js';
+import type { KeycloakAdminClient } from '../tenant/keycloak-admin-client.js';
 
 export async function userRoutes(
   fastify: FastifyInstance,
-  opts: { db: Database },
+  opts: { keycloakAdmin: KeycloakAdminClient },
 ): Promise<void> {
-  const userService = new UserService(opts.db);
+  const userService = new UserService(opts.keycloakAdmin);
 
   const adminRoles = requireRole(['superusuario', 'admin']);
   const managerRoles = requireRole(['superusuario', 'admin', 'manager', 'asistente']);
@@ -20,7 +20,7 @@ export async function userRoutes(
     { preHandler: [managerRoles] },
     async (request, reply) => {
       try {
-        const result = await userService.findAll({ role: 'tecnico', isActive: true, pageSize: 100 });
+        const result = await userService.findAll({ role: 'tecnico', isActive: true, pageSize: 100 }, request.user.tenantSlug);
         return reply.status(200).send(result);
       } catch (error) {
         if (error instanceof UserError) {
@@ -92,7 +92,7 @@ export async function userRoutes(
       }
 
       try {
-        const result = await userService.findAll(parseResult.data);
+        const result = await userService.findAll(parseResult.data, request.user.tenantSlug);
         return reply.status(200).send(result);
       } catch (error) {
         if (error instanceof UserError) {
@@ -117,7 +117,7 @@ export async function userRoutes(
       const { id } = request.params as { id: string };
 
       try {
-        const user = await userService.findById(id);
+        const user = await userService.findById(id, request.user.tenantSlug);
         return reply.status(200).send(user);
       } catch (error) {
         if (error instanceof UserError) {

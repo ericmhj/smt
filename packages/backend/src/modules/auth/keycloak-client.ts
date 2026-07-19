@@ -107,6 +107,56 @@ export class KeycloakClient {
   }
 
   /**
+   * Refreshes an access token using a Keycloak refresh_token.
+   *
+   * @throws AuthError with AUTH_INVALID_CREDENTIALS (401) if refresh token is invalid/expired
+   * @throws AuthError with AUTH_SERVICE_UNAVAILABLE (503) if Keycloak is unreachable
+   */
+  async refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret,
+      refresh_token: refreshToken,
+    });
+
+    let response: Response;
+
+    try {
+      response = await fetch(this.config.tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch {
+      throw new AuthError(
+        503,
+        KeycloakErrorCode.AUTH_SERVICE_UNAVAILABLE,
+        'Servicio de autenticación no disponible',
+      );
+    }
+
+    if (response.status === 400 || response.status === 401) {
+      throw new AuthError(401, 'AUTH_REFRESH_INVALID', 'Sesión expirada, inicie sesión nuevamente');
+    }
+
+    if (!response.ok) {
+      throw new AuthError(
+        503,
+        KeycloakErrorCode.AUTH_SERVICE_UNAVAILABLE,
+        'Servicio de autenticación no disponible',
+      );
+    }
+
+    const data = (await response.json()) as KeycloakTokenResponse;
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+    };
+  }
+
+  /**
    * Decodes a JWT access token payload (without cryptographic verification)
    * and extracts the standard Keycloak claims.
    *

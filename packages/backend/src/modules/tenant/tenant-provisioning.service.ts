@@ -92,13 +92,13 @@ export class TenantProvisioningService {
       console.log(`[TenantProvisioning] keycloakAdmin disponible: ${!!this.keycloakAdmin}`);
       if (this.keycloakAdmin) {
         try {
-          console.log(`[TenantProvisioning] Llamando keycloakAdmin.createUser({ email: '${admin_email}', tenantSlug: '${slug}', role: 'admin' })`);
+          console.log(`[TenantProvisioning] Llamando keycloakAdmin.createUser({ email: '${admin_email}', tenantSlug: '${slug}', roles: ['admin'] })`);
           await this.keycloakAdmin.createUser({
             email: admin_email,
             password: 'admin123',
             temporary: false,
             tenantSlug: slug,
-            role: 'admin',
+            roles: ['admin'],
           });
           console.log(`[TenantProvisioning] Usuario '${admin_email}' creado en Keycloak exitosamente`);
         } catch (keycloakError) {

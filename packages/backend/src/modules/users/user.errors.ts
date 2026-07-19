@@ -5,6 +5,7 @@ export enum UserErrorCode {
   CANNOT_MODIFY_SUPERUSUARIO = 'USER_004',
   CANNOT_MANAGE_ROLE = 'USER_005',
   CANNOT_DELETE_SELF = 'USER_006',
+  IDENTITY_PROVIDER_UNAVAILABLE = 'USER_007',
 }
 
 export class UserError extends Error {

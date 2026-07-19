@@ -99,7 +99,7 @@ async function main(): Promise<void> {
               password: 'admin123',
               temporary: true,
               tenantSlug: tenant.slug,
-              role: user.role,
+              roles: [user.role],
               firstName: user.name.split(' ')[0] || 'User',
               lastName: user.name.split(' ').slice(1).join(' ') || tenant.slug,
             });
