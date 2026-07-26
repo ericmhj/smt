@@ -10,6 +10,10 @@ const PUBLIC_ROUTES: Array<{ method: string; url: string }> = [
   { method: 'POST', url: '/api/v1/auth/refresh' },
   { method: 'GET', url: '/api/health' },
   { method: 'GET', url: '/api/docs' },
+  { method: 'GET', url: '/api/form-templates' },
+  { method: 'POST', url: '/api/form-templates' },
+  { method: 'PUT', url: '/api/form-templates' },
+  { method: 'PATCH', url: '/api/form-templates' },
 ];
 
 function isPublicRoute(method: string, url: string): boolean {

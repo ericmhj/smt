@@ -20,6 +20,18 @@ export const formFiltersSchema = z.object({
   search: z.string().optional(),
 });
 
+export const createFormFromTemplateSchema = z.object({
+  templateId: z.string().uuid('templateId debe ser un UUID válido'),
+  html: z.string().min(1, 'El HTML es requerido'),
+  name: z.string().min(1, 'El nombre es requerido').max(255),
+});
+
+export const associateTemplateSchema = z.object({
+  templateId: z.string().uuid('templateId debe ser un UUID válido'),
+});
+
 export type CreateFormInput = z.infer<typeof createFormSchema>;
 export type UpdateFormInput = z.infer<typeof updateFormSchema>;
 export type FormFiltersInput = z.infer<typeof formFiltersSchema>;
+export type CreateFormFromTemplateInput = z.infer<typeof createFormFromTemplateSchema>;
+export type AssociateTemplateInput = z.infer<typeof associateTemplateSchema>;

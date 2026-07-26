@@ -5,3 +5,16 @@
 body {
   @apply bg-gray-50 text-gray-900;
 }
+
+/* Validation Rules Engine - inline field error styles */
+.field-error-border {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+}
+
+.field-error {
+  color: #dc2626;
+  font-size: 11px;
+  margin-top: 2px;
+  padding: 2px 4px;
+}

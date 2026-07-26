@@ -93,6 +93,7 @@ export class FormService {
     html: string,
     metadata: FormMetadata,
     actor: JWTPayload,
+    options?: { templateId?: string; formType?: string },
   ): Promise<{ form: FormResponse; version: FormVersionResponse }> {
     // Sanitize HTML
     const sanitizedHtml = HTMLParser.sanitize(html);
@@ -127,14 +128,23 @@ export class FormService {
     const slug = await this.generateUniqueSlug(metadata.name);
 
     // Create form record
+    const formValues: Record<string, unknown> = {
+      name: metadata.name,
+      slug,
+      createdBy: actor.sub,
+      currentVersion: 1,
+    };
+
+    if (options?.templateId) {
+      formValues.templateId = options.templateId;
+    }
+    if (options?.formType) {
+      formValues.formType = options.formType;
+    }
+
     const formResult = await this.db
       .insert(forms)
-      .values({
-        name: metadata.name,
-        slug,
-        createdBy: actor.sub,
-        currentVersion: 1,
-      })
+      .values(formValues as typeof forms.$inferInsert)
       .returning();
 
     const form = formResult[0]!;

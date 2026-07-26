@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { FORM_STYLES } from '@/lib/form-styles';
 
 interface DynamicFormProps {
   htmlContent: string;
@@ -11,6 +12,9 @@ interface DynamicFormProps {
 export default function DynamicForm({ htmlContent, onSubmit, submitting }: DynamicFormProps) {
   const formRef = useRef<HTMLDivElement>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+
+  // The HTML already contains its own <style> block with original form styles
+  const styledHtml = htmlContent;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,8 +84,7 @@ export default function DynamicForm({ htmlContent, onSubmit, submitting }: Dynam
       <div
         ref={formRef}
         className="mb-6"
-        dangerouslySetInnerHTML={{ __html: htmlContent }}
-        style={{ all: 'initial' }}
+        dangerouslySetInnerHTML={{ __html: styledHtml }}
       />
 
       <div className="flex gap-3 pt-4 border-t">

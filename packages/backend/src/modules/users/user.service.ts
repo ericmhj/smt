@@ -1,5 +1,6 @@
 import type Redis from 'ioredis';
 import { getRedisClient } from '../../lib/redis.js';
+import { getSqlClient } from '../../db/index.js';
 import { UserError, UserErrorCode } from './user.errors.js';
 import type {
   CreateUserDTO,
@@ -88,7 +89,23 @@ export class UserService {
     const createdUser = users[0];
     const now = new Date().toISOString();
 
-    // 5. Map to UserResponse
+    // 5. Insert into local tenant DB (cache for FK references in forms, reactivos, etc.)
+    if (createdUser?.id) {
+      try {
+        const sql = getSqlClient();
+        const primaryRole = data.roles[0] || 'tecnico';
+        await sql`
+          INSERT INTO users (id, email, name, password_hash, role, is_active)
+          VALUES (${createdUser.id}, ${data.email}, ${data.name}, 'keycloak-managed', ${primaryRole}, true)
+          ON CONFLICT (id) DO NOTHING
+        `;
+      } catch (dbError) {
+        // Non-blocking: local DB sync failure should not prevent user creation
+        console.warn(`[UserService] Local DB insert failed for ${data.email}: ${dbError instanceof Error ? dbError.message : 'unknown'}`);
+      }
+    }
+
+    // 6. Map to UserResponse
     return {
       id: createdUser?.id ?? '',
       email: data.email,

@@ -26,6 +26,8 @@ import { clienteRoutes } from './modules/clientes/cliente.routes.js';
 import { documentoRoutes } from './modules/clientes/documento.routes.js';
 import { ticketRoutes } from './modules/tickets/ticket.routes.js';
 import { platformRoutes } from './modules/platform/platform.routes.js';
+import { formTemplateRoutes } from './modules/form-templates/form-template.routes.js';
+import { overrideRoutes } from './modules/validation/override.routes.js';
 import { KeycloakAdminClient } from './modules/tenant/keycloak-admin-client.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -96,8 +98,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
   await app.register(userRoutes, { keycloakAdmin });
 
+  // Register form template routes (platform-level catalog)
+  await app.register(formTemplateRoutes, { db });
+
   // Register form routes
   await app.register(formRoutes, { db });
+
+  // Register validation override routes (tenant-level rule overrides)
+  await app.register(overrideRoutes, { db });
 
   // Register assignment routes
   await app.register(assignmentRoutes, { db });

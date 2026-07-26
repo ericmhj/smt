@@ -38,7 +38,24 @@ export default function Sidebar() {
 
   if (!user) return null;
 
-  const visibleItems = navItems.filter((item) => item.roles.includes(user.role));
+  // Detect if inside a tenant subdomain — hide platform-only items
+  let isInsideTenant = false;
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const parts = hostname.split('.');
+    isInsideTenant =
+      hostname !== 'localhost' &&
+      parts.length >= 2 &&
+      parts[0] !== 'www' &&
+      parts[parts.length - 1] === 'localhost';
+  }
+
+  const visibleItems = navItems.filter((item) => {
+    if (!item.roles.includes(user.role)) return false;
+    // Hide "Tenants" link when inside a tenant subdomain
+    if (item.href === '/admin/tenants' && isInsideTenant) return false;
+    return true;
+  });
 
   return (
     <aside className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">

@@ -38,3 +38,6 @@ docker-compose.override.yml
 .kiro
 .devcontainer
 docs
+
+.pnpm-store/
+node_modules/

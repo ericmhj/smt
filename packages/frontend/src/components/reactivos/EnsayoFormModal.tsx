@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { FORM_STYLES } from '@/lib/form-styles';
 
 interface EnsayoFormModalProps {
   reactivoId: string;
@@ -27,6 +28,9 @@ export default function EnsayoFormModal({
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [generalError, setGeneralError] = useState<string | null>(null);
+
+  // The HTML already contains its own <style> block with original form styles
+  const styledHtml = htmlContent;
 
   // Inject initial values into form fields after render
   useEffect(() => {
@@ -159,7 +163,8 @@ export default function EnsayoFormModal({
 
           <form ref={formRef} onSubmit={handleSubmit}>
             <div
-              dangerouslySetInnerHTML={{ __html: htmlContent }}
+              className="prose prose-sm max-w-none [&_input]:border [&_input]:border-gray-300 [&_input]:rounded [&_input]:px-2 [&_input]:py-1 [&_input]:w-full [&_input]:mb-3 [&_select]:border [&_select]:border-gray-300 [&_select]:rounded [&_select]:px-2 [&_select]:py-1 [&_select]:w-full [&_select]:mb-3 [&_textarea]:border [&_textarea]:border-gray-300 [&_textarea]:rounded [&_textarea]:px-2 [&_textarea]:py-1 [&_textarea]:w-full [&_textarea]:mb-3 [&_label]:font-medium [&_label]:text-gray-700 [&_label]:block [&_label]:mb-1 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50"
+              dangerouslySetInnerHTML={{ __html: styledHtml }}
             />
           </form>
         </div>

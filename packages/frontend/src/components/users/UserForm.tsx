@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface UserFormData {
   email: string;
@@ -18,14 +19,37 @@ interface UserFormProps {
 
 export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProps) {
   const router = useRouter();
+  const { user: currentUser } = useAuth();
+
+  // Derive email domain from tenant subdomain (e.g. "el-reloj.localhost:3000" → "@el-reloj.com")
+  let tenantDomain = '';
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const parts = hostname.split('.');
+    if (parts.length >= 2 && parts[parts.length - 1] === 'localhost') {
+      tenantDomain = `@${parts[0]}.com`;
+    } else if (currentUser?.tenantSlug) {
+      tenantDomain = `@${currentUser.tenantSlug}.com`;
+    }
+  }
+
   const [formData, setFormData] = useState<UserFormData>({
     email: initialData?.email || '',
     name: initialData?.name || '',
     password: '',
     role: initialData?.role || 'tecnico',
   });
+  const [emailPrefix, setEmailPrefix] = useState(
+    initialData?.email ? initialData.email.split('@')[0] || '' : ''
+  );
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Update full email when prefix changes
+  const handleEmailPrefixChange = (prefix: string) => {
+    setEmailPrefix(prefix);
+    setFormData({ ...formData, email: prefix ? `${prefix}${tenantDomain}` : '' });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +58,8 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
 
     try {
       const data = { ...formData };
-      if (isEdit && !data.password) {
+      // Don't send password if empty or whitespace-only (edit mode)
+      if (!data.password || data.password.trim() === '') {
         delete data.password;
       }
       await onSubmit(data);
@@ -65,13 +90,19 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Correo electrónico</label>
-        <input
-          type="email"
-          value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          required
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        <div className="flex">
+          <input
+            type="text"
+            value={emailPrefix}
+            onChange={(e) => handleEmailPrefixChange(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+            required
+            placeholder="usuario"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <span className="inline-flex items-center px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-md text-sm text-gray-600">
+            {tenantDomain}
+          </span>
+        </div>
       </div>
 
       <div>
@@ -79,12 +110,17 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
           Contraseña {isEdit && '(dejar vacío para no cambiar)'}
         </label>
         <input
-          type="password"
+          type="text"
           value={formData.password}
           onChange={(e) => setFormData({ ...formData, password: e.target.value })}
           required={!isEdit}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder={isEdit ? 'Dejar vacío para no cambiar' : 'Mínimo 8 caracteres'}
+          minLength={isEdit ? undefined : 8}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
         />
+        {!isEdit && (
+          <p className="text-xs text-gray-500 mt-1">Mínimo 8 caracteres</p>
+        )}
       </div>
 
       <div>

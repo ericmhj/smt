@@ -8,6 +8,7 @@ import { ZodError } from 'zod';
 interface AppError extends Error {
   statusCode: number;
   code: string;
+  details?: unknown;
 }
 
 function isAppError(error: unknown): error is AppError {
@@ -48,13 +49,20 @@ export function registerErrorHandler(app: FastifyInstance): void {
         const level = error.statusCode >= 500 ? 'error' : 'warn';
         request.log[level]({ err: error, requestId }, error.message);
 
-        return reply.status(error.statusCode).send({
+        const response: Record<string, unknown> = {
           statusCode: error.statusCode,
           code: error.code,
           message: error.message,
           timestamp,
           requestId,
-        });
+        };
+
+        // Include details (e.g., validation errors array) when present
+        if (error.details !== undefined) {
+          response.errors = error.details;
+        }
+
+        return reply.status(error.statusCode).send(response);
       }
 
       // Handle Fastify-specific errors (e.g., rate limit, validation)

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import ValidationRulesTab from '@/components/forms/ValidationRulesTab';
 
 interface FormVersion {
   version: number;
@@ -32,12 +33,15 @@ interface FormDetail {
   updatedAt: string;
 }
 
+type TabId = 'details' | 'validation';
+
 export default function FormDetailPage() {
   const params = useParams();
   const [form, setForm] = useState<FormDetail | null>(null);
   const [versions, setVersions] = useState<FormVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabId>('details');
 
   useEffect(() => {
     const fetchForm = async () => {
@@ -63,6 +67,11 @@ export default function FormDetailPage() {
   if (loading) return <p className="text-gray-500">Cargando...</p>;
   if (!form) return <p className="text-red-500">Formulario no encontrado.</p>;
 
+  const tabs: { id: TabId; label: string }[] = [
+    { id: 'details', label: 'Detalles' },
+    { id: 'validation', label: 'Reglas de Validación' },
+  ];
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -82,48 +91,74 @@ export default function FormDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="flex items-center gap-4 mb-4">
-              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${form.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                {form.isActive ? 'Activo' : 'Inactivo'}
-              </span>
-              <span className="text-sm text-gray-500">Versión actual: v{form.currentVersion}</span>
-            </div>
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="flex space-x-6" aria-label="Tabs">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-            {showPreview && form.currentVersionData?.htmlContent && (
-              <div className="border rounded-md p-4 mt-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Vista previa</h3>
-                <div
-                  className="prose max-w-none"
-                  dangerouslySetInnerHTML={{ __html: form.currentVersionData.htmlContent }}
-                />
+      {/* Tab Content */}
+      {activeTab === 'details' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center gap-4 mb-4">
+                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${form.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  {form.isActive ? 'Activo' : 'Inactivo'}
+                </span>
+                <span className="text-sm text-gray-500">Versión actual: v{form.currentVersion}</span>
               </div>
-            )}
-          </div>
-        </div>
 
-        <div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Historial de versiones</h3>
-            <div className="space-y-2">
-              {versions.length > 0 ? (
-                versions.map((v) => (
-                  <div key={v.version} className="flex items-center justify-between text-sm border-b pb-2">
-                    <span className="font-medium">v{v.version}</span>
-                    <span className="text-gray-500 text-xs">
-                      {new Date(v.createdAt).toLocaleDateString('es')}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-500 text-sm">Sin historial de versiones.</p>
+              {showPreview && form.currentVersionData?.htmlContent && (
+                <div className="border rounded-md p-4 mt-4">
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">Vista previa</h3>
+                  <div
+                    className="prose max-w-none"
+                    dangerouslySetInnerHTML={{ __html: form.currentVersionData.htmlContent }}
+                  />
+                </div>
               )}
             </div>
           </div>
+
+          <div>
+            <div className="bg-white rounded-lg shadow p-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Historial de versiones</h3>
+              <div className="space-y-2">
+                {versions.length > 0 ? (
+                  versions.map((v) => (
+                    <div key={v.version} className="flex items-center justify-between text-sm border-b pb-2">
+                      <span className="font-medium">v{v.version}</span>
+                      <span className="text-gray-500 text-xs">
+                        {new Date(v.createdAt).toLocaleDateString('es')}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-sm">Sin historial de versiones.</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {activeTab === 'validation' && (
+        <ValidationRulesTab formId={params.id as string} />
+      )}
     </div>
   );
 }

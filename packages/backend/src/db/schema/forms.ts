@@ -20,6 +20,8 @@ export const forms = pgTable('forms', {
     .references(() => users.id),
   parentFormId: uuid('parent_form_id'),
   currentVersion: integer('current_version').notNull().default(1),
+  templateId: uuid('template_id'),
+  formType: varchar('form_type', { length: 50 }).default('legacy'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

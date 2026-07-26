@@ -23,6 +23,61 @@ async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
 }
 
+async function seedNom025ValidationRules() {
+  const nom025Rules = [
+    {
+      form_type: 'nom025',
+      name: 'Campos obligatorios sección identificación',
+      description: 'Todos los campos de identificación del centro de trabajo deben estar completos',
+      sections: JSON.stringify([
+        { sectionName: 'identificacion', pattern: 'required_all', patternConfig: {}, fieldOverrides: [] },
+        { sectionName: 'datos_generales', pattern: 'required_all', patternConfig: {}, fieldOverrides: [] },
+        { sectionName: 'reconocimiento', pattern: 'required_all', patternConfig: {}, fieldOverrides: [] },
+      ]),
+    },
+    {
+      form_type: 'nom025',
+      name: 'Rangos numéricos sección mediciones',
+      description: 'Los valores de luxes medidos deben estar dentro de rangos físicamente posibles',
+      sections: JSON.stringify([
+        { sectionName: 'mediciones', pattern: 'numeric_range', patternConfig: { min: 0, max: 100000 }, fieldOverrides: [] },
+      ]),
+    },
+    {
+      form_type: 'nom025',
+      name: 'RFC válido',
+      description: 'El RFC del centro de trabajo debe cumplir con el formato SAT',
+      sections: JSON.stringify([
+        {
+          sectionName: 'identificacion',
+          pattern: 'identity',
+          patternConfig: {},
+          fieldOverrides: [
+            {
+              fieldName: 'centro_rfc',
+              transferFunction: 'pattern',
+              config: {
+                regex: '^[A-ZÑ&]{3,4}\\d{6}[A-Z0-9]{3}$',
+                message: 'El RFC no tiene un formato válido (esperado: 3-4 letras + 6 dígitos + 3 alfanuméricos)',
+              },
+            },
+          ],
+        },
+      ]),
+    },
+  ];
+
+  for (const rule of nom025Rules) {
+    await client`
+      INSERT INTO public.validation_rule_templates (form_type, name, description, is_active, sections)
+      VALUES (${rule.form_type}, ${rule.name}, ${rule.description}, true, ${rule.sections}::jsonb)
+      ON CONFLICT (form_type, name) DO NOTHING
+    `;
+  }
+
+  console.log('✅ NOM-025 validation rule templates created/verified');
+}
+
 async function seed() {
   console.log('🌱 Seeding database...');
 
@@ -373,6 +428,9 @@ async function seed() {
   ]).onConflictDoNothing();
 
   console.log('✅ Clientes de prueba created/verified');
+
+  // --- Validation Rule Templates (NOM-025) ---
+  await seedNom025ValidationRules();
 
   console.log('🎉 Seed completed successfully!');
   console.log('');

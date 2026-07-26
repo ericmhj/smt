@@ -54,6 +54,35 @@ export class TenantProvisioningService {
 
     const sql = getSqlClient();
 
+    // Step 0: Create admin user in Keycloak FIRST to get their UUID.
+    // This UUID will be used as users.id in the tenant schema, ensuring
+    // actor.sub from JWT tokens matches users.id (fixes FK violation on forms).
+    let adminUserId = randomUUID(); // fallback if Keycloak unavailable
+
+    if (this.keycloakAdmin) {
+      try {
+        console.log(`[TenantProvisioning] Creando usuario '${admin_email}' en Keycloak antes de la transacción DB...`);
+        const kcUserId = await this.keycloakAdmin.createUser({
+          email: admin_email,
+          password: 'admin123',
+          temporary: false,
+          tenantSlug: slug,
+          roles: ['admin'],
+        });
+        if (kcUserId) {
+          adminUserId = kcUserId;
+          console.log(`[TenantProvisioning] UUID de Keycloak obtenido: ${adminUserId}`);
+        } else {
+          console.warn(`[TenantProvisioning] Keycloak no retornó UUID para '${admin_email}', usando UUID local`);
+        }
+      } catch (keycloakError) {
+        const kcErrorMsg = keycloakError instanceof Error ? keycloakError.message : 'Error desconocido';
+        console.warn(`[TenantProvisioning] Error creando usuario en Keycloak (usando UUID local): ${kcErrorMsg}`);
+      }
+    } else {
+      console.warn(`[TenantProvisioning] KeycloakAdminClient no disponible — usuario '${admin_email}' NO creado en Keycloak`);
+    }
+
     // Wrap ALL provisioning steps in a single transaction for atomicity.
     // If any step fails, the transaction rolls back (including CREATE SCHEMA).
     try {
@@ -71,13 +100,13 @@ export class TenantProvisioningService {
           VALUES (${tenantId}, ${slug}, ${nombre}, 'active')
         `;
 
-        // 4. Create admin user in the tenant schema
+        // 4. Create admin user in the tenant schema using the Keycloak UUID.
+        // This ensures users.id === actor.sub from JWT, preventing FK violations.
         const hashedPassword = await bcrypt.hash('admin123', 10);
-        const userId = randomUUID();
         await tx.unsafe(`SET search_path TO ${schemaName}, public`);
         await tx`
           INSERT INTO users (id, name, email, password_hash, role, is_active)
-          VALUES (${userId}, 'Admin', ${admin_email}, ${hashedPassword}, 'admin', true)
+          VALUES (${adminUserId}, 'Admin', ${admin_email}, ${hashedPassword}, 'admin', true)
           ON CONFLICT (email) DO NOTHING
         `;
 
@@ -86,28 +115,6 @@ export class TenantProvisioningService {
       });
 
       console.log(`[TenantProvisioning] Tenant '${slug}' provisionado exitosamente (schema: ${schemaName})`);
-
-      // 5. Create admin user in Keycloak (non-blocking)
-      console.log(`[TenantProvisioning] Paso 5: Intentando crear usuario en Keycloak para '${admin_email}'...`);
-      console.log(`[TenantProvisioning] keycloakAdmin disponible: ${!!this.keycloakAdmin}`);
-      if (this.keycloakAdmin) {
-        try {
-          console.log(`[TenantProvisioning] Llamando keycloakAdmin.createUser({ email: '${admin_email}', tenantSlug: '${slug}', roles: ['admin'] })`);
-          await this.keycloakAdmin.createUser({
-            email: admin_email,
-            password: 'admin123',
-            temporary: false,
-            tenantSlug: slug,
-            roles: ['admin'],
-          });
-          console.log(`[TenantProvisioning] Usuario '${admin_email}' creado en Keycloak exitosamente`);
-        } catch (keycloakError) {
-          const kcErrorMsg = keycloakError instanceof Error ? keycloakError.message : 'Error desconocido';
-          console.error(`[TenantProvisioning] Error creando usuario en Keycloak (no-bloqueante): ${kcErrorMsg}`);
-        }
-      } else {
-        console.warn(`[TenantProvisioning] KeycloakAdminClient no disponible — usuario '${admin_email}' NO creado en Keycloak`);
-      }
     } catch (error) {
       // Structured error logging for operator diagnosis
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';

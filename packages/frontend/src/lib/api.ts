@@ -5,6 +5,18 @@ import { extractTenantSlug } from './tenant';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+export class ApiError extends Error {
+  status: number;
+  data: Record<string, unknown>;
+
+  constructor(message: string, status: number, data: Record<string, unknown>) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
 interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
 }
@@ -91,7 +103,8 @@ export async function api<T = unknown>(
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(error.message || `Error ${res.status}`);
+    const apiError = new ApiError(error.message || `Error ${res.status}`, res.status, error);
+    throw apiError;
   }
 
   if (res.status === 204) return undefined as T;

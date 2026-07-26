@@ -116,8 +116,9 @@ export class KeycloakAdminClient {
    * Creates a user in Keycloak and assigns the specified realm role.
    * Handles 409 Conflict (user already exists) gracefully.
    * Non-blocking: logs errors but does not throw.
+   * Returns the Keycloak UUID of the created (or existing) user, or null on failure.
    */
-  async createUser(options: CreateUserOptions): Promise<void> {
+  async createUser(options: CreateUserOptions): Promise<string | null> {
     const { email, password, temporary, tenantSlug, roles, firstName, lastName } = options;
 
     try {
@@ -163,13 +164,15 @@ export class KeycloakAdminClient {
 
       if (createResponse.status === 409) {
         console.log(`[KeycloakAdmin] Usuario '${email}' ya existe en Keycloak, omitiendo creación`);
-        return;
+        // Still return the existing user's ID
+        const token2 = await this.getAdminToken();
+        return await this.getUserIdByEmail(email, token2);
       }
 
       if (!createResponse.ok) {
         const errorText = await createResponse.text();
         console.error(`[KeycloakAdmin] Error creando usuario '${email}': ${createResponse.status} - ${errorText}`);
-        return;
+        return null;
       }
 
       console.log(`[KeycloakAdmin] Usuario '${email}' creado exitosamente (status 201)`);
@@ -190,7 +193,7 @@ export class KeycloakAdminClient {
 
       if (!userId) {
         console.error(`[KeycloakAdmin] No se pudo obtener ID del usuario '${email}' después de crearlo`);
-        return;
+        return null;
       }
 
       // 3. Assign the realm roles
@@ -200,9 +203,11 @@ export class KeycloakAdminClient {
       }
 
       console.log(`[KeycloakAdmin] ✓ Proceso completo: '${email}' creado con roles '${roles.join(', ')}' en tenant '${tenantSlug}'`);
+      return userId;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       console.error(`[KeycloakAdmin] Error no-bloqueante creando usuario '${email}': ${errorMessage}`);
+      return null;
     }
   }
 
@@ -239,12 +244,13 @@ export class KeycloakAdminClient {
   /**
    * Search for a user by email and return their Keycloak ID.
    */
-  private async getUserIdByEmail(email: string, token: string): Promise<string | null> {
+  async getUserIdByEmail(email: string, token?: string): Promise<string | null> {
+    const t = token ?? await this.getAdminToken();
     const searchUrl = `${this.config.baseUrl}/admin/realms/${this.config.realm}/users?email=${encodeURIComponent(email)}&exact=true`;
 
     const response = await fetch(searchUrl, {
       method: 'GET',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${t}` },
     });
 
     if (!response.ok) {

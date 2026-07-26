@@ -17,3 +17,9 @@ export { clientes, clienteContactos, clienteDocumentos } from './clientes.js';
 export { tickets, slaConfig, reglasAsignacion } from './tickets.js';
 
 export { tenants } from './platform.js';
+
+export {
+  formTemplates,
+  validationRuleTemplates,
+  validationRuleOverrides,
+} from './validation.js';

@@ -6,6 +6,8 @@ import { tickets } from '../../db/schema/tickets.js';
 import { users } from '../../db/schema/users.js';
 import { ReactivoError, ReactivoErrorCode } from './reactivo.errors.js';
 import { validateResponses } from './schema-validator.js';
+import { validate } from '../validation/validation-engine.js';
+import type { FormField } from '../validation/validation-engine.js';
 import type {
   ReactivoState,
   ReactivoResponse,
@@ -334,6 +336,40 @@ export class ReactivoService {
       );
     }
 
+    // 6b. Validate responses against configured validation rules (if not a legacy form)
+    // Legacy forms (no template_id or form_type === 'legacy') skip rules validation (H(s)=1)
+    const formResult = await this.db
+      .select({ formType: forms.formType, templateId: forms.templateId })
+      .from(forms)
+      .where(eq(forms.id, reactivo.formId))
+      .limit(1);
+
+    const form = formResult[0];
+    const isLegacy = !form || !form.templateId || form.formType === 'legacy';
+
+    if (!isLegacy) {
+      const fieldsMetadata = (
+        version.fieldsMetadata as { sections: Array<{ sectionName: string; fields: string[] }> }
+      )?.sections || [];
+
+      const validationResult = await validate(
+        this.db,
+        reactivo.formId,
+        form.formType || 'legacy',
+        responses,
+        fieldsMetadata as FormField[],
+      );
+
+      if (!validationResult.valid) {
+        throw new ReactivoError(
+          422,
+          ReactivoErrorCode.VALIDATION_RULES_FAILED,
+          'La validación del formulario falló',
+          validationResult.errors,
+        );
+      }
+    }
+
     // 7. Update reactivo: responses + state='en_revision'
     const updateResult = await this.db
       .update(reactivos)
@@ -406,7 +442,7 @@ export class ReactivoService {
 
     const fvResult = await this.db
       .select({
-        sanitizedHtml: formVersions.sanitizedHtml,
+        htmlContent: formVersions.htmlContent,
         jsonSchema: formVersions.jsonSchema,
         fieldsMetadata: formVersions.fieldsMetadata,
       })
@@ -423,8 +459,9 @@ export class ReactivoService {
       );
     }
 
+    // Return htmlContent (with original styles) as sanitizedHtml for backward compatibility
     return {
-      sanitizedHtml: fv.sanitizedHtml,
+      sanitizedHtml: fv.htmlContent,
       jsonSchema: fv.jsonSchema,
       fieldsMetadata: fv.fieldsMetadata,
     };

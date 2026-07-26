@@ -5,7 +5,7 @@ import type { JWTPayload, LoginDTO } from './auth.types.js';
 import { AuthError } from './auth.service.js';
 import { KeycloakClient, type KeycloakClientConfig } from './keycloak-client.js';
 import { LicenseClient, type LicenseClientConfig } from './license-client.js';
-import { db } from '../../db/index.js';
+import { db, getSqlClient } from '../../db/index.js';
 import { tenants } from '../../db/schema/platform.js';
 
 export interface IntegratedAuthConfig {
@@ -173,6 +173,23 @@ export class IntegratedAuthStrategy implements AuthStrategy {
 
     // Assemble the cascade login result
     const primaryRole = claims.roles[0] || 'tecnico';
+
+    // Sync role to local DB (Keycloak is source of truth)
+    // This keeps users.role updated as a local cache for operational queries.
+    try {
+      const sanitizedSlug = tenantSlug.replace(/-/g, '_');
+      const schemaName = `sgr_${sanitizedSlug}`;
+      const sql = getSqlClient();
+      await sql.unsafe(`SET search_path TO ${schemaName}, public`);
+      await sql`
+        UPDATE users SET role = ${primaryRole}, updated_at = NOW()
+        WHERE id = ${claims.sub} AND role != ${primaryRole}
+      `;
+      await sql.unsafe(`SET search_path TO public`);
+    } catch (syncError) {
+      // Non-blocking: role sync failure should not prevent login
+      console.warn(`[IntegratedAuth] Role sync failed for ${claims.sub}: ${syncError instanceof Error ? syncError.message : 'unknown'}`);
+    }
 
     return {
       accessToken: tokenResponse.access_token,

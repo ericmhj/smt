@@ -11,15 +11,20 @@ export enum ReactivoErrorCode {
   REASON_REQUIRED = 'REACTIVO_010',
   UNAUTHORIZED_ROLE = 'REACTIVO_011',
   INVALID_STATE_FOR_SUBMIT = 'REACTIVO_012',
+  VALIDATION_RULES_FAILED = 'VALIDATION_RULES_FAILED',
 }
 
 export class ReactivoError extends Error {
+  public details?: unknown;
+
   constructor(
     public statusCode: number,
     public code: ReactivoErrorCode,
     message: string,
+    details?: unknown,
   ) {
     super(message);
     this.name = 'ReactivoError';
+    this.details = details;
   }
 }
