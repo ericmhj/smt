@@ -25,9 +25,15 @@ export async function formTemplateRoutes(
 ): Promise<void> {
   const service = new FormTemplateService(opts.db);
 
-  // GET /api/form-templates — list active templates (catalog)
+  // GET /api/form-templates — list active templates (tenant catalog)
   fastify.get('/api/form-templates', async (request, reply) => {
     const templates = await service.list();
+    return reply.status(200).send(templates);
+  });
+
+  // GET /api/form-templates/all — list all templates including inactive (platform admin)
+  fastify.get('/api/form-templates/all', async (request, reply) => {
+    const templates = await service.listAll();
     return reply.status(200).send(templates);
   });
 

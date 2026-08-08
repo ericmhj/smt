@@ -171,8 +171,39 @@ export class IntegratedAuthStrategy implements AuthStrategy {
       throw new AuthError(403, 'TENANT_SUSPENDED', 'Organización suspendida');
     }
 
-    // Assemble the cascade login result
-    const primaryRole = claims.roles[0] || 'tecnico';
+    // Verify user exists in this tenant's schema
+    // Skip for platform_admin users on the default tenant (they don't belong to any specific tenant)
+    const primaryRole = claims.roles?.find((r: string) =>
+      ['platform_admin', 'superusuario', 'admin', 'manager', 'tecnico', 'asistente'].includes(r)
+    ) || 'tecnico';
+
+    const isPlatformAdmin = claims.roles?.includes('platform_admin');
+
+    if (!isPlatformAdmin) {
+      const sanitizedSlug = tenantSlug.replace(/-/g, '_');
+      const schemaName = `sgr_${sanitizedSlug}`;
+      const sql = getSqlClient();
+
+      try {
+        await sql.unsafe(`SET search_path TO ${schemaName}, public`);
+        const userInTenant = await sql`
+          SELECT id FROM users WHERE id = ${claims.sub} AND is_active = true LIMIT 1
+        `;
+        if (userInTenant.length === 0) {
+          const userByEmail = await sql`
+            SELECT id FROM users WHERE email = ${claims.email || credentials.email} AND is_active = true LIMIT 1
+          `;
+          if (userByEmail.length === 0) {
+            await sql.unsafe(`SET search_path TO public`);
+            throw new AuthError(403, 'USER_NOT_IN_TENANT', 'Acceso denegado, dominio indefinido');
+          }
+        }
+        await sql.unsafe(`SET search_path TO public`);
+      } catch (err) {
+        if (err instanceof AuthError) throw err;
+        console.warn(`[IntegratedAuth] User-in-tenant check failed: ${err instanceof Error ? err.message : 'unknown'}`);
+      }
+    }
 
     // Sync role to local DB (Keycloak is source of truth)
     // This keeps users.role updated as a local cache for operational queries.

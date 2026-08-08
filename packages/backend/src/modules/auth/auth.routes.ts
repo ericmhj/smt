@@ -41,6 +41,7 @@ export async function authRoutes(
       // Integrated mode: delegate to strategy's cascade login
       if (authStrategy.login) {
         const result = await authStrategy.login(parseResult.data, tenantSlug);
+        console.log(`[LOGIN OK] user=${parseResult.data.email} tenant=${tenantSlug}`);
         return reply.status(200).send({
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
@@ -58,6 +59,7 @@ export async function authRoutes(
       });
     } catch (error) {
       if (error instanceof AuthError) {
+        console.error(`[LOGIN FAILED] code=${error.code} status=${error.statusCode} msg=${error.message}`);
         return reply.status(error.statusCode).send({
           statusCode: error.statusCode,
           code: error.code,
@@ -66,6 +68,7 @@ export async function authRoutes(
           requestId: request.id,
         });
       }
+      console.error('[LOGIN FAILED] unexpected:', error);
       throw error;
     }
   }

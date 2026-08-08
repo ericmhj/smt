@@ -38,7 +38,9 @@ function propertyToZod(prop: JSONSchemaProperty, isRequired: boolean): ZodTypeAn
         strSchema = strSchema.regex(new RegExp(prop.pattern));
       }
       if (prop.enum && prop.enum.length > 0) {
-        schema = z.enum(prop.enum as [string, ...string[]]);
+        // Allow empty string for non-required enum fields (HTML selects send '' when unselected)
+        const enumValues = isRequired ? prop.enum : [...prop.enum, ''];
+        schema = z.enum(enumValues as [string, ...string[]]);
       } else {
         schema = strSchema;
       }
@@ -46,7 +48,8 @@ function propertyToZod(prop: JSONSchemaProperty, isRequired: boolean): ZodTypeAn
     }
     case 'number':
     case 'integer': {
-      let numSchema = z.number();
+      // Use coerce to automatically convert string → number (HTML inputs always send strings)
+      let numSchema = z.coerce.number();
       if (prop.type === 'integer') {
         numSchema = numSchema.int();
       }
@@ -60,7 +63,7 @@ function propertyToZod(prop: JSONSchemaProperty, isRequired: boolean): ZodTypeAn
       break;
     }
     case 'boolean':
-      schema = z.boolean();
+      schema = z.coerce.boolean();
       break;
     case 'array':
       schema = z.array(z.unknown());

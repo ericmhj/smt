@@ -1,0 +1,422 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { api } from '@/lib/api';
+import { ThemePanel } from './components/ThemePanel';
+
+interface Tenant {
+  id: string;
+  slug: string;
+  nombre: string;
+}
+
+interface TemplateSection {
+  id: string;
+  type: string;
+  title: string;
+  order: number;
+  is_active: boolean;
+  config: Record<string, unknown>;
+}
+
+interface ReportTemplate {
+  id: string;
+  formType: string | null;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  sections: TemplateSection[];
+  createdAt: string;
+}
+
+interface Activation {
+  id: string;
+  report_template_id: string;
+  activated_by: string;
+  activated_at: string;
+  theme_config: Record<string, unknown> | null;
+}
+
+const SECTION_TYPE_LABELS: Record<string, string> = {
+  static: 'Estático',
+  form_content: 'Contenido',
+  signatures: 'Firmas',
+  custom_html: 'HTML',
+  observations: 'Observaciones',
+  state_history: 'Historial',
+};
+
+export default function ReportTemplatesPage() {
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [selectedTenant, setSelectedTenant] = useState('');
+  const [templates, setTemplates] = useState<ReportTemplate[]>([]);
+  const [activations, setActivations] = useState<Activation[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filterFormType, setFilterFormType] = useState('');
+  const [tenantForms, setTenantForms] = useState<Array<{ id: string; form_type: string; name: string }>>([]);
+  const [themeTarget, setThemeTarget] = useState<{ activationId: string; themeConfig: any; formId?: string } | null>(null);
+
+  // Load tenants
+  useEffect(() => {
+    api<{ data: Tenant[] }>('/api/platform/tenants?limit=100')
+      .then((res) => setTenants(res.data || []))
+      .catch(() => {});
+  }, []);
+
+  // Load tenant forms (only when tenant is selected)
+  useEffect(() => {
+    if (!selectedTenant) {
+      setTenantForms([]);
+      setFilterFormType('');
+      return;
+    }
+    api<Array<{ id: string; form_type: string | null; name: string }>>(`/api/platform/tenants/${selectedTenant}/forms`)
+      .then((forms) => {
+        const items = forms
+          .filter((f) => f.form_type)
+          .map((f) => ({ id: f.id, form_type: f.form_type!, name: f.name }));
+        setTenantForms(items);
+        if (filterFormType && !items.some((f) => f.id === filterFormType)) {
+          setFilterFormType('');
+        }
+      })
+      .catch(() => {
+        setTenantForms([]);
+      });
+  }, [selectedTenant]);
+
+  // Load templates filtered by selected form or tenant
+  const fetchTemplates = async () => {
+    setLoading(true);
+    try {
+      let url = '/api/report-templates';
+      if (filterFormType) {
+        // filterFormType holds the form ID — filter by tenant_form_id OR by form_type of that form
+        const form = tenantForms.find((f) => f.id === filterFormType);
+        if (form) {
+          url = `/api/report-templates?form_type=${encodeURIComponent(form.form_type)}`;
+        }
+      }
+      // Always load all templates (global + tenant-specific) — filtering is visual
+      const data = await api<ReportTemplate[]>(url);
+      setTemplates(data);
+    } catch (error) {
+      console.error('Error fetching report templates:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [filterFormType, selectedTenant]);
+
+  // Load activations when tenant changes
+  const fetchActivations = async () => {
+    if (!selectedTenant) {
+      setActivations([]);
+      return;
+    }
+    try {
+      const data = await api<Activation[]>(
+        `/api/platform/tenants/${selectedTenant}/report-template-activations`,
+      );
+      setActivations(data);
+    } catch {
+      setActivations([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchActivations();
+  }, [selectedTenant]);
+
+  const handleToggle = async (id: string) => {
+    try {
+      await api(`/api/report-templates/${id}/toggle`, { method: 'PATCH' });
+      await fetchTemplates();
+    } catch (error) {
+      console.error('Error toggling template:', error);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`¿Eliminar el template "${name}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api(`/api/report-templates/${id}`, { method: 'DELETE' });
+      await fetchTemplates();
+    } catch (error) {
+      console.error('Error deleting template:', error);
+    }
+  };
+
+  const handleActivateForTenant = async (templateId: string) => {
+    if (!selectedTenant) return;
+    try {
+      const activation = await api<{ id: string }>(`/api/platform/tenants/${selectedTenant}/report-template-activations`, {
+        method: 'POST',
+        body: JSON.stringify({ report_template_id: templateId }),
+      });
+
+      // Auto-apply theme from form colors
+      if (activation?.id) {
+        try {
+          await api(`/api/platform/tenants/${selectedTenant}/report-template-activations/${activation.id}/auto-theme`, {
+            method: 'POST',
+          });
+        } catch {
+          // Non-blocking: theme will use defaults if auto-theme fails
+        }
+      }
+
+      await fetchActivations();
+    } catch (error) {
+      console.error('Error activating template for tenant:', error);
+    }
+  };
+
+  const handleDeactivateForTenant = async (templateId: string) => {
+    if (!selectedTenant) return;
+    const activation = activations.find((a) => a.report_template_id === templateId);
+    if (!activation) return;
+    try {
+      await api(
+        `/api/platform/tenants/${selectedTenant}/report-template-activations/${activation.id}`,
+        { method: 'DELETE' },
+      );
+      await fetchActivations();
+    } catch (error) {
+      console.error('Error deactivating template for tenant:', error);
+    }
+  };
+
+  const isActivatedForTenant = (templateId: string): boolean => {
+    return activations.some((a) => a.report_template_id === templateId);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Templates de Reporte</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Definir estructura de PDF por tenant y tipo de formulario
+          </p>
+        </div>
+        <Link
+          href={(() => {
+            const params = new URLSearchParams();
+            if (selectedTenant) params.set('tenant_slug', selectedTenant);
+            if (filterFormType) {
+              params.set('tenant_form_id', filterFormType);
+              const form = tenantForms.find((f) => f.id === filterFormType);
+              if (form) {
+                params.set('form_type', form.form_type);
+                params.set('form_name', form.name);
+              }
+            }
+            const qs = params.toString();
+            return `/platform/report-templates/nuevo${qs ? `?${qs}` : ''}`;
+          })()}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
+        >
+          Nuevo Template
+        </Link>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-4 items-end">
+        <div className="flex-1 max-w-xs">
+          <label className="block text-xs font-medium text-gray-600 mb-1">Tenant</label>
+          <select
+            value={selectedTenant}
+            onChange={(e) => setSelectedTenant(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-label="Seleccionar tenant"
+          >
+            <option value="">Seleccionar tenant...</option>
+            {tenants.map((t) => (
+              <option key={t.id} value={t.slug}>
+                {t.nombre} ({t.slug})
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Tipo formulario</label>
+          <select
+            value={filterFormType}
+            onChange={(e) => setFilterFormType(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            aria-label="Filtrar por formulario"
+          >
+            <option value="">Todos los formularios</option>
+            {tenantForms.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Info banner when tenant is selected */}
+      {selectedTenant && (
+        <div className="bg-blue-50 border border-blue-200 rounded-md px-4 py-2 text-sm text-blue-800">
+          Gestionando templates para <strong>{tenants.find((t) => t.slug === selectedTenant)?.nombre || selectedTenant}</strong>.
+          Usa el toggle "Asignado" para activar/desactivar templates en este tenant.
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Tipo
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Nombre
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Global
+              </th>
+              {selectedTenant && (
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Asignado
+                </th>
+              )}
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {loading ? (
+              <tr>
+                <td colSpan={selectedTenant ? 5 : 4} className="px-4 py-8 text-center text-gray-500">
+                  Cargando...
+                </td>
+              </tr>
+            ) : templates.length === 0 ? (
+              <tr>
+                <td colSpan={selectedTenant ? 5 : 4} className="px-4 py-8 text-center text-gray-500">
+                  No hay templates de reporte registrados.
+                </td>
+              </tr>
+            ) : (
+              templates.map((t) => {
+                const activated = isActivatedForTenant(t.id);
+
+                return (
+                  <tr key={t.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800">
+                        {t.formType || 'Sin tipo'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-sm font-medium text-gray-900">{t.name}</div>
+                      {t.description && (
+                        <div className="text-xs text-gray-500">{t.description}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => handleToggle(t.id)}
+                        className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
+                          t.isActive
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-red-100 text-red-800 hover:bg-red-200'
+                        }`}
+                      >
+                        {t.isActive ? 'Activo' : 'Inactivo'}
+                      </button>
+                    </td>
+                    {selectedTenant && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() =>
+                              activated
+                                ? handleDeactivateForTenant(t.id)
+                                : handleActivateForTenant(t.id)
+                            }
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
+                              activated
+                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            }`}
+                          >
+                            {activated ? '✅ Asignado' : '⚪ Sin asignar'}
+                          </button>
+                          {activated && (
+                            <button
+                              onClick={() => {
+                                const activation = activations.find((a) => a.report_template_id === t.id);
+                                if (activation) {
+                                  // Find a matching form for auto-theme extraction
+                                  const matchingForm = tenantForms.find((f) => f.form_type === t.formType);
+                                  setThemeTarget({
+                                    activationId: activation.id,
+                                    themeConfig: activation.theme_config || null,
+                                    formId: filterFormType || matchingForm?.id || undefined,
+                                  });
+                                }
+                              }}
+                              className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 cursor-pointer transition-colors"
+                              title="Configurar tema visual"
+                            >
+                              🎨 Tema
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                    <td className="px-4 py-3 text-sm space-x-2">
+                      <Link
+                        href={`/platform/report-templates/${t.id}`}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        Editar
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(t.id, t.name)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Eliminar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {!selectedTenant && (
+        <div className="text-center py-6 text-gray-400 text-sm border border-dashed border-gray-300 rounded-lg">
+          Selecciona un tenant para gestionar la asignación de templates
+        </div>
+      )}
+
+      {/* Theme Panel Modal */}
+      {themeTarget && selectedTenant && (
+        <ThemePanel
+          tenantSlug={selectedTenant}
+          activationId={themeTarget.activationId}
+          formId={themeTarget.formId}
+          currentThemeConfig={themeTarget.themeConfig}
+          onSave={() => {
+            setThemeTarget(null);
+            fetchActivations();
+          }}
+          onClose={() => setThemeTarget(null)}
+        />
+      )}
+    </div>
+  );
+}

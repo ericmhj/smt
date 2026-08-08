@@ -40,6 +40,8 @@ function toFormResponse(form: {
   slug: string;
   isActive: boolean;
   currentVersion: number;
+  templateId?: string | null;
+  formType?: string | null;
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
@@ -50,6 +52,8 @@ function toFormResponse(form: {
     slug: form.slug,
     isActive: form.isActive,
     currentVersion: form.currentVersion,
+    templateId: form.templateId ?? null,
+    formType: form.formType ?? null,
     createdBy: form.createdBy,
     createdAt: form.createdAt.toISOString(),
     updatedAt: form.updatedAt.toISOString(),

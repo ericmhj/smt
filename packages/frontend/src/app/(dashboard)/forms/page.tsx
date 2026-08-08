@@ -12,6 +12,8 @@ export interface FormItem {
   description?: string;
   isActive: boolean;
   currentVersion: number;
+  templateId?: string | null;
+  formType?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -254,6 +254,40 @@ CREATE TABLE IF NOT EXISTS validation_rule_overrides (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Calculation Rule Overrides (tenant-level)
+CREATE TABLE IF NOT EXISTS calculation_rule_overrides (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  form_id UUID NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
+  rule_template_id UUID,
+  override_type VARCHAR(20) NOT NULL CHECK (override_type IN ('deactivate', 'custom')),
+  custom_rule JSONB,
+  created_by UUID NOT NULL REFERENCES users(id),
+  updated_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Report Template Activations (tenant-level explicit activation)
+CREATE TABLE IF NOT EXISTS report_template_activations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  report_template_id UUID NOT NULL,
+  activated_by UUID NOT NULL REFERENCES users(id),
+  activated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  theme_config JSONB DEFAULT '{}'
+);
+
+-- Report Template Overrides (tenant-level per-form overrides)
+CREATE TABLE IF NOT EXISTS report_template_overrides (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  form_id UUID NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
+  report_template_id UUID NOT NULL,
+  override_type VARCHAR(20) NOT NULL CHECK (override_type IN ('deactivate', 'custom')),
+  custom_sections JSONB,
+  created_by UUID NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_reactivos_responses ON reactivos USING GIN (responses);
 CREATE INDEX IF NOT EXISTS idx_reactivos_state ON reactivos (state);
@@ -275,6 +309,11 @@ CREATE INDEX IF NOT EXISTS idx_tickets_prioridad ON tickets (prioridad);
 CREATE INDEX IF NOT EXISTS idx_tickets_fecha_limite ON tickets (fecha_limite);
 CREATE INDEX IF NOT EXISTS idx_overrides_form_id ON validation_rule_overrides (form_id);
 CREATE INDEX IF NOT EXISTS idx_overrides_rule_template ON validation_rule_overrides (rule_template_id);
+CREATE INDEX IF NOT EXISTS idx_calc_overrides_form_id ON calculation_rule_overrides (form_id);
+CREATE INDEX IF NOT EXISTS idx_calc_overrides_rule_template ON calculation_rule_overrides (rule_template_id);
+CREATE INDEX IF NOT EXISTS idx_rta_template_id ON report_template_activations (report_template_id);
+CREATE INDEX IF NOT EXISTS idx_rto_form_id ON report_template_overrides (form_id);
+CREATE INDEX IF NOT EXISTS idx_rto_template_id ON report_template_overrides (report_template_id);
 
 -- Trigger: prevent UPDATE/DELETE on audit_logs
 CREATE OR REPLACE FUNCTION prevent_audit_modification()

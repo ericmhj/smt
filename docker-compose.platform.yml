@@ -110,7 +110,7 @@ services:
       start_period: 10s
 
   license-redis:
-    image: redis:7-alpine
+    image: valkey/valkey:8-alpine
     container_name: license-redis
     restart: unless-stopped
     ports:
@@ -312,7 +312,7 @@ services:
       retries: 10
 
   sgr-redis:
-    image: redis:7-alpine
+    image: valkey/valkey:8-alpine
     container_name: sgr-redis
     restart: unless-stopped
     ports:

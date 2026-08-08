@@ -2,7 +2,8 @@ export type Role = 'platform_admin' | 'superusuario' | 'admin' | 'manager' | 'te
 
 const routePermissions: Record<string, Role[]> = {
   '/admin': ['platform_admin'],
-  '/users': ['superusuario', 'admin'],
+  '/platform': ['platform_admin'],
+  '/users': ['superusuario', 'admin', 'manager'],
   '/forms': ['superusuario', 'admin', 'manager'],
   '/assignments': ['superusuario', 'admin', 'manager'],
   '/kanban': ['superusuario', 'admin', 'manager'],

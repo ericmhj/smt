@@ -267,7 +267,8 @@ export async function reactivoRoutes(
           }
         }
 
-        const pdfBuffer = await pdfService.generate(paramResult.data.id);
+        const tenantSchema = (request as any).tenantContext?.schemaName;
+        const pdfBuffer = await pdfService.generate(paramResult.data.id, tenantSchema);
 
         return reply
           .header('Content-Type', 'application/pdf')

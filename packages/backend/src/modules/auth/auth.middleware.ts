@@ -14,6 +14,16 @@ const PUBLIC_ROUTES: Array<{ method: string; url: string }> = [
   { method: 'POST', url: '/api/form-templates' },
   { method: 'PUT', url: '/api/form-templates' },
   { method: 'PATCH', url: '/api/form-templates' },
+  { method: 'GET', url: '/api/validation-rules' },
+  { method: 'POST', url: '/api/validation-rules' },
+  { method: 'PUT', url: '/api/validation-rules' },
+  { method: 'PATCH', url: '/api/validation-rules' },
+  { method: 'DELETE', url: '/api/validation-rules' },
+  { method: 'GET', url: '/api/calculation-rules' },
+  { method: 'POST', url: '/api/calculation-rules' },
+  { method: 'PUT', url: '/api/calculation-rules' },
+  { method: 'PATCH', url: '/api/calculation-rules' },
+  { method: 'DELETE', url: '/api/calculation-rules' },
 ];
 
 function isPublicRoute(method: string, url: string): boolean {

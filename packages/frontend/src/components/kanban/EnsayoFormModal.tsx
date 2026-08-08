@@ -16,6 +16,7 @@ interface EnsayoFormModalProps {
   reactivoId: string;
   htmlContent: string;
   initialResponses?: Record<string, unknown>;
+  readOnly?: boolean;
   onClose: () => void;
   onSubmitSuccess: () => void;
 }
@@ -24,6 +25,7 @@ export default function EnsayoFormModal({
   reactivoId,
   htmlContent,
   initialResponses,
+  readOnly = false,
   onClose,
   onSubmitSuccess,
 }: EnsayoFormModalProps) {
@@ -53,9 +55,17 @@ export default function EnsayoFormModal({
           element.value = String(value ?? '');
         }
       }
+      // If readOnly, disable all inputs
+      if (readOnly) {
+        container.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
+          el.disabled = true;
+          el.style.opacity = '1';
+          el.style.color = '#1e293b';
+        });
+      }
     }, 100);
     return () => clearTimeout(timer);
-  }, [initialResponses, strippedHtml]);
+  }, [initialResponses, strippedHtml, readOnly]);
 
   // Apply visual error indicators to the DOM
   const applyValidationErrorsToDOM = useCallback((errors: ValidationError[]) => {
@@ -193,7 +203,9 @@ export default function EnsayoFormModal({
       <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold text-gray-800">Llenar Ensayo</h2>
+          <h2 className="text-lg font-semibold text-gray-800">
+            {readOnly ? 'Ver Formulario' : 'Llenar Ensayo'}
+          </h2>
           <button
             onClick={onClose}
             disabled={submitting}
@@ -258,16 +270,18 @@ export default function EnsayoFormModal({
             disabled={submitting}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm"
           >
-            Cancelar
+            {readOnly ? 'Cerrar' : 'Cancelar'}
           </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting || hasValidationErrors}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
-          >
-            {submitting ? 'Enviando...' : 'Enviar Ensayo'}
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting || hasValidationErrors}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
+            >
+              {submitting ? 'Enviando...' : 'Enviar Ensayo'}
+            </button>
+          )}
         </div>
       </div>
     </div>

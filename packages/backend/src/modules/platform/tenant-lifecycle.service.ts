@@ -1,11 +1,13 @@
 import { eq, and, lte } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
+import { randomUUID } from 'node:crypto';
 import type { Database } from '../../db/index.js';
 import { getSqlClient } from '../../db/index.js';
 import { tenants } from '../../db/schema/platform.js';
 import { applySchemaTemplate } from '../../db/apply-schema-template.js';
 import { getRedisClient } from '../../lib/redis.js';
 import { deleteAllWithPrefix } from '../../lib/minio.js';
+import type { KeycloakAdminClient } from '../tenant/keycloak-admin-client.js';
 
 export class TenantLifecycleError extends Error {
   constructor(
@@ -42,9 +44,11 @@ const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
 
 export class TenantLifecycleService {
   private db: Database;
+  private keycloakAdmin: KeycloakAdminClient | null;
 
-  constructor(db: Database) {
+  constructor(db: Database, keycloakAdmin?: KeycloakAdminClient) {
     this.db = db;
+    this.keycloakAdmin = keycloakAdmin ?? null;
   }
 
   /**
@@ -62,14 +66,47 @@ export class TenantLifecycleService {
   }
 
   /**
+   * Validates that the admin email domain relates to the tenant slug.
+   * At least one significant part of the slug (≥3 chars) must appear in the email domain.
+   */
+  private validateEmailDomain(email: string, slug: string): void {
+    const domain = email.split('@')[1]?.toLowerCase();
+    if (!domain) {
+      throw new TenantLifecycleError(
+        422,
+        'INVALID_ADMIN_EMAIL',
+        `El email '${email}' no tiene un dominio válido.`,
+      );
+    }
+
+    const slugParts = slug.toLowerCase().replace(/_/g, '-').split('-');
+    const domainBase = domain.split('.')[0]!; // "padsa" from "padsa.com"
+
+    const matches = slugParts.some(
+      (part) => part.length >= 3 && domainBase.includes(part),
+    );
+
+    if (!matches) {
+      throw new TenantLifecycleError(
+        422,
+        'EMAIL_DOMAIN_MISMATCH',
+        `El dominio del email '${email}' no coincide con el tenant '${slug}'. El dominio debe contener al menos una parte del slug (ej: admin@${slugParts[0]}.com).`,
+      );
+    }
+  }
+
+  /**
    * Creates a new tenant with full schema provisioning.
    * Atomic: either all artifacts are created or none.
+   * Also creates the admin user in Keycloak if KeycloakAdminClient is available.
    */
   async createTenant(dto: CreateTenantDTO): Promise<TenantRecord> {
     this.validateSlug(dto.slug);
+    this.validateEmailDomain(dto.adminEmail, dto.slug);
 
     const sqlClient = getSqlClient();
-    const schemaName = `sgr_${dto.slug}`;
+    const sanitizedSlug = dto.slug.replace(/-/g, '_');
+    const schemaName = `sgr_${sanitizedSlug}`;
 
     // Check for existing tenant with same slug
     const existing = await this.db
@@ -80,6 +117,31 @@ export class TenantLifecycleService {
 
     if (existing.length > 0) {
       throw new TenantLifecycleError(409, 'TENANT_SLUG_EXISTS', `El slug '${dto.slug}' ya está en uso`);
+    }
+
+    // Step 0: Create admin user in Keycloak FIRST to get their UUID.
+    let adminUserId = randomUUID();
+
+    if (this.keycloakAdmin) {
+      try {
+        console.log(`[TenantLifecycle] Creando usuario '${dto.adminEmail}' en Keycloak...`);
+        const kcUserId = await this.keycloakAdmin.createUser({
+          email: dto.adminEmail,
+          password: dto.adminPassword,
+          temporary: false,
+          tenantSlug: dto.slug,
+          roles: ['admin'],
+        });
+        if (kcUserId) {
+          adminUserId = kcUserId;
+          console.log(`[TenantLifecycle] UUID de Keycloak obtenido: ${adminUserId}`);
+        } else {
+          console.warn(`[TenantLifecycle] Keycloak no retornó UUID para '${dto.adminEmail}', usando UUID local`);
+        }
+      } catch (keycloakError) {
+        const kcMsg = keycloakError instanceof Error ? keycloakError.message : 'Error desconocido';
+        console.warn(`[TenantLifecycle] Error creando usuario en Keycloak: ${kcMsg}. Continuando con UUID local.`);
+      }
     }
 
     // Use a transaction for atomicity
@@ -98,12 +160,12 @@ export class TenantLifecycleService {
         // 3. Apply schema template (creates all tables)
         await applySchemaTemplate(tx, schemaName);
 
-        // 4. Insert admin user into the new schema
+        // 4. Insert admin user into the new schema with Keycloak UUID
         const passwordHash = await bcrypt.hash(dto.adminPassword, 10);
         await tx.unsafe(`SET search_path TO ${schemaName}, public`);
         await tx`
-          INSERT INTO users (email, password_hash, name, role, is_active)
-          VALUES (${dto.adminEmail}, ${passwordHash}, 'Administrador', 'admin', true)
+          INSERT INTO users (id, email, password_hash, name, role, is_active)
+          VALUES (${adminUserId}, ${dto.adminEmail}, ${passwordHash}, 'Administrador', 'admin', true)
         `;
 
         // Reset search_path

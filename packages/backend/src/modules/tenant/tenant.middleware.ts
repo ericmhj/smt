@@ -25,7 +25,7 @@ const TENANT_CACHE_TTL = 60; // seconds
  * Checks if the given URL is a platform route that skips tenant resolution.
  */
 function isPlatformRoute(url: string): boolean {
-  return url.startsWith('/api/platform/') || url.startsWith('/api/platform') || url.startsWith('/api/form-templates');
+  return url.startsWith('/api/platform/') || url.startsWith('/api/platform') || url.startsWith('/api/form-templates') || url.startsWith('/api/validation-rules') || url.startsWith('/api/calculation-rules') || url.startsWith('/api/report-templates') || url.startsWith('/api/report-themes');
 }
 
 /**

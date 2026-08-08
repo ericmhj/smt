@@ -26,7 +26,7 @@ async function hashPassword(password: string): Promise<string> {
 async function seedNom025ValidationRules() {
   const nom025Rules = [
     {
-      form_type: 'nom025',
+      form_type: 'NOM-025-STPS-2008',
       name: 'Campos obligatorios sección identificación',
       description: 'Todos los campos de identificación del centro de trabajo deben estar completos',
       sections: JSON.stringify([
@@ -36,7 +36,7 @@ async function seedNom025ValidationRules() {
       ]),
     },
     {
-      form_type: 'nom025',
+      form_type: 'NOM-025-STPS-2008',
       name: 'Rangos numéricos sección mediciones',
       description: 'Los valores de luxes medidos deben estar dentro de rangos físicamente posibles',
       sections: JSON.stringify([
@@ -44,7 +44,7 @@ async function seedNom025ValidationRules() {
       ]),
     },
     {
-      form_type: 'nom025',
+      form_type: 'NOM-025-STPS-2008',
       name: 'RFC válido',
       description: 'El RFC del centro de trabajo debe cumplir con el formato SAT',
       sections: JSON.stringify([
@@ -432,15 +432,57 @@ async function seed() {
   // --- Validation Rule Templates (NOM-025) ---
   await seedNom025ValidationRules();
 
+  // ─── Tenant: el-reloj ─────────────────────────────────────────────────────
+  // Seed users for the el-reloj tenant (used in integration tests)
+  console.log('🏢 Seeding tenant el-reloj...');
+  try {
+    await client`SET search_path TO sgr_el_reloj, public`;
+
+    const elRelojAdminPw = await hashPassword('admin123');
+    const elRelojTecnicoPw = await hashPassword('tecnico123');
+    const elRelojAsistentePw = await hashPassword('asistente123');
+    const elRelojManagerPw = await hashPassword('manager123');
+
+    await client`
+      INSERT INTO users (email, password_hash, name, role, is_active)
+      VALUES
+        ('admin@default.com', ${elRelojAdminPw}, 'Admin el-reloj', 'admin', true),
+        ('juan@el-reloj.com', ${elRelojTecnicoPw}, 'Juan Lopez', 'tecnico', true),
+        ('pedro.juarez@el-reloj.com', ${elRelojAsistentePw}, 'Pedro Juarez', 'asistente', true),
+        ('robles@el-reloj.com', ${elRelojManagerPw}, 'Katia Robles', 'manager', true)
+      ON CONFLICT (email) DO NOTHING
+    `;
+
+    console.log('✅ Tenant el-reloj users created/verified');
+  } catch (err) {
+    console.log('⚠️  Tenant el-reloj seed skipped (schema may not exist yet)');
+  }
+
+  // Reset search_path
+  await client`SET search_path TO public`;
+
   console.log('🎉 Seed completed successfully!');
   console.log('');
   console.log('Test accounts:');
+  console.log('');
+  console.log('  === Platform (http://localhost:3000/login) ===');
   console.log('  Platform Admin: platform@sgr.local / platform123');
+  console.log('');
+  console.log('  === CRM Admin (http://localhost:4200/login) ===');
+  console.log('  root@mikel-crm.local / Root_Admin_2026!');
+  console.log('');
+  console.log('  === SGR Default Tenant (localhost:3000) ===');
   console.log('  Superusuario:   admin@sgr.local / admin123');
   console.log('  Admin:          administrador@sgr.local / admin123');
   console.log('  Manager:        manager@sgr.local / manager123');
   console.log('  Técnico:        tecnico@sgr.local / tecnico123');
   console.log('  Asistente:      asistente@sgr.local / asistente123');
+  console.log('');
+  console.log('  === Tenant el-reloj (http://el-reloj.localhost:3000) ===');
+  console.log('  Admin:     admin@default.com / admin123');
+  console.log('  Técnico:   juan@el-reloj.com / tecnico123');
+  console.log('  Asistente: pedro.juarez@el-reloj.com / asistente123');
+  console.log('  Manager:   robles@el-reloj.com / manager123');
 
   await client.end();
 }

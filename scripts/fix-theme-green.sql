@@ -1,0 +1,3 @@
+UPDATE sgr_el_reloj.report_template_activations
+SET theme_config = '{"baseTheme":"personalizado","palette":{"primary":"#1a6b3a","primaryLight":"#2e8b57","primaryDark":"#0e4422","secondary":"#6b1a4c","accent":"#1a6b5a","neutral":"#737b8c","background":"#f9fcfa","text":"#1a2520"},"typography":{"fontFamily":"IBM Plex Sans","titleSize":14,"bodySize":11,"lineHeight":1.5},"layout":{"margins":"normal","headerStyle":"full","tableStyle":"bordered","separator":"line"},"branding":{"showLogo":true,"logoUrl":null,"logoPosition":"left","showWatermark":false,"watermarkText":null},"footer":{"showPageNumbers":true,"showDate":true,"customText":null}}'::jsonb
+WHERE report_template_id = '94943955-468f-4f89-91a3-d9df3f9debb1';

@@ -54,7 +54,6 @@ export class KeycloakClient {
       client_secret: this.config.clientSecret,
       username: email,
       password,
-      scope: 'openid',
     });
 
     let response: Response;

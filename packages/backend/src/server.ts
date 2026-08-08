@@ -68,12 +68,17 @@ const start = async () => {
           case 'tenant.created':
           case 'tenant.onboarded':
             if (payload.slug || payload.nombre) {
+              const adminEmail = payload.admin_email || payload.emailContacto;
+              if (!adminEmail) {
+                console.error(`[KafkaHandler] Evento ${eventType} rechazado: no se proporcionó admin_email para slug '${payload.slug}'`);
+                break;
+              }
               await provisioningService.provisionTenant({
                 type: 'tenant.created',
                 tenant_id: payload.tenantId || payload.tenant_id || '',
                 slug: payload.slug || deriveSlug(payload.nombre),
                 nombre: payload.nombre || payload.slug || '',
-                admin_email: payload.admin_email || payload.emailContacto || 'admin@default.com',
+                admin_email: adminEmail,
                 timestamp: payload.occurredAt || new Date().toISOString(),
               });
             }

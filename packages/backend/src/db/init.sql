@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS forms (
   created_by UUID NOT NULL REFERENCES users(id),
   parent_form_id UUID,
   current_version INTEGER NOT NULL DEFAULT 1,
+  template_id UUID,
+  form_type VARCHAR(50) DEFAULT 'legacy',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -319,6 +321,44 @@ ON CONFLICT (prioridad) DO NOTHING;
 
 
 -- ============================================================================
+-- VALIDATION RULES ENGINE (public schema — platform-level)
+-- ============================================================================
+
+-- Form Templates (Formularios Padre) - platform-level master form definitions
+CREATE TABLE IF NOT EXISTS public.form_templates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  form_type VARCHAR(50) NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  html_content TEXT NOT NULL,
+  fields_metadata JSONB NOT NULL,
+  current_version INTEGER NOT NULL DEFAULT 1,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_by UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Validation Rule Templates - platform-level global validation rules per form type
+CREATE TABLE IF NOT EXISTS public.validation_rule_templates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  form_type VARCHAR(50) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  sections JSONB NOT NULL,
+  created_by UUID,
+  updated_by UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(form_type, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_validation_rules_form_type ON public.validation_rule_templates(form_type);
+CREATE INDEX IF NOT EXISTS idx_validation_rules_active ON public.validation_rule_templates(form_type, is_active);
+
+
+-- ============================================================================
 -- MULTI-TENANT PLATFORM TABLES (public schema)
 -- ============================================================================
 
@@ -401,3 +441,61 @@ ALTER TABLE IF EXISTS public.cliente_documentos SET SCHEMA sgr_default;
 ALTER TABLE IF EXISTS public.tickets SET SCHEMA sgr_default;
 ALTER TABLE IF EXISTS public.sla_config SET SCHEMA sgr_default;
 ALTER TABLE IF EXISTS public.reglas_asignacion SET SCHEMA sgr_default;
+
+
+-- ============================================================================
+-- VALIDATION RULES ENGINE - Platform Tables (public schema)
+-- ============================================================================
+
+-- Form Templates (Formularios Padre) - platform-level master form definitions
+CREATE TABLE IF NOT EXISTS public.form_templates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  form_type VARCHAR(50) NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  html_content TEXT NOT NULL,
+  fields_metadata JSONB NOT NULL,
+  current_version INTEGER NOT NULL DEFAULT 1,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_by UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Validation Rule Templates - platform-level global validation rules per form type
+CREATE TABLE IF NOT EXISTS public.validation_rule_templates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  form_type VARCHAR(50) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  sections JSONB NOT NULL,
+  created_by UUID,
+  updated_by UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(form_type, name)
+);
+
+-- Indexes for validation rule templates
+CREATE INDEX IF NOT EXISTS idx_validation_rules_form_type ON public.validation_rule_templates(form_type);
+CREATE INDEX IF NOT EXISTS idx_validation_rules_active ON public.validation_rule_templates(form_type, is_active);
+
+
+-- Calculation Rule Templates - platform-level calculation rules per form type
+CREATE TABLE IF NOT EXISTS public.calculation_rule_templates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  form_type VARCHAR(50) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  calculations JSONB NOT NULL,
+  created_by UUID,
+  updated_by UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(form_type, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_calculation_rules_form_type ON public.calculation_rule_templates(form_type);
+CREATE INDEX IF NOT EXISTS idx_calculation_rules_active ON public.calculation_rule_templates(form_type, is_active);

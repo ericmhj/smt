@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { api, apiUpload } from '@/lib/api';
+import { extractTenantSlug } from '@/lib/tenant';
 import { useAuth } from '@/contexts/AuthContext';
 import KanbanColumn from './KanbanColumn';
 import TransitionDialog from './TransitionDialog';
@@ -56,7 +57,16 @@ export default function KanbanBoard() {
       const params = new URLSearchParams();
       if (filterTechnician) params.set('tecnicoId', filterTechnician);
       if (filterForm) params.set('formId', filterForm);
-      const result = await api<KanbanResponse>(`/api/kanban?${params.toString()}`);
+      const token = localStorage.getItem('access_token');
+      const tenantSlug = extractTenantSlug();
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/kanban?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-Slug': tenantSlug,
+        },
+      });
+      if (!response.ok) throw new Error('Failed');
+      const result = await response.json();
       setData(result.columns || []);
     } catch {
       setData([]);
@@ -106,27 +116,98 @@ export default function KanbanBoard() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
 
-  const handleCardClick = async (cardId: string) => {
-    if (pdfUrl) return; // Block if PDF already open
+  // Form viewer state
+  const [formHtml, setFormHtml] = useState<string | null>(null);
+  const [formLoading, setFormLoading] = useState(false);
 
-    const confirmed = window.confirm('¿Desea abrir el PDF del ensayo?');
-    if (!confirmed) return;
-
-    setPdfLoading(true);
+  const handleFormClick = async (cardId: string) => {
+    setFormLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://localhost:3001/api/reactivos/${cardId}/pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // Try detail endpoint (accessible by all roles)
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/reactivos/${cardId}`, {
+        headers: { Authorization: `Bearer ${token}`, 'X-Tenant-Slug': extractTenantSlug() },
       });
+      if (res.ok) {
+        const detail = await res.json();
+        const responses = detail.responses || {};
+        const rows = Object.entries(responses)
+          .map(([key, val]) => `<tr><td style="padding:8px 12px;font-weight:600;color:#475569;border-bottom:1px solid #f1f5f9;background:#f8fafc;width:35%;">${key.replace(/_/g, ' ')}</td><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;">${val ?? '—'}</td></tr>`)
+          .join('');
+        const html = `
+          <div style="font-family:'Segoe UI',sans-serif;max-width:800px;margin:0 auto;">
+            <div style="border-bottom:2px solid #2563eb;padding-bottom:10px;margin-bottom:20px;">
+              <h2 style="margin:0;color:#2563eb;font-size:18px;">${detail.formName || 'Formulario'}</h2>
+              <p style="margin:4px 0 0;color:#64748b;font-size:13px;">Técnico: ${detail.tecnicoName || 'N/A'} • Estado: ${detail.state} • Intento #${detail.attemptNumber || 1}</p>
+            </div>
+            <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:6px;">
+              ${rows || '<tr><td style="padding:20px;text-align:center;color:#94a3b8;">Sin respuestas registradas</td></tr>'}
+            </table>
+          </div>`;
+        setFormHtml(html);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Error ${res.status}: ${errorData.message || 'No se pudo obtener el formulario'}`);
+      }
+    } catch (err) {
+      alert('Error de conexión al obtener el formulario');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const handlePdfClick = async (cardId: string) => {
+    setPdfLoading(true);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const tenantSlug = extractTenantSlug();
+
+    const fetchPdf = async (token: string) => {
+      return fetch(`${apiUrl}/api/reactivos/${cardId}/pdf`, {
+        headers: { Authorization: `Bearer ${token}`, 'X-Tenant-Slug': tenantSlug },
+      });
+    };
+
+    try {
+      let token = localStorage.getItem('access_token') || '';
+      let res = await fetchPdf(token);
+
+      // If 401, attempt token refresh and retry
+      if (res.status === 401) {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          const refreshRes = await fetch(`${apiUrl}/api/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Tenant-Slug': tenantSlug },
+            body: JSON.stringify({ refreshToken }),
+          });
+          if (refreshRes.ok) {
+            const data = await refreshRes.json();
+            localStorage.setItem('access_token', data.accessToken);
+            if (data.refreshToken) localStorage.setItem('refresh_token', data.refreshToken);
+            document.cookie = `sgr-token=${encodeURIComponent(data.accessToken)}; path=/; SameSite=Lax`;
+            token = data.accessToken;
+            res = await fetchPdf(token);
+          } else {
+            window.location.href = '/login';
+            return;
+          }
+        } else {
+          window.location.href = '/login';
+          return;
+        }
+      }
+
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         setPdfUrl(url);
       } else {
-        alert('Error al obtener el PDF');
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Error ${res.status}: ${errorData.message || 'No se pudo generar el PDF'}`);
       }
     } catch {
-      alert('Error de conexión');
+      alert('Error de conexión al generar el PDF');
     } finally {
       setPdfLoading(false);
     }
@@ -137,6 +218,10 @@ export default function KanbanBoard() {
       URL.revokeObjectURL(pdfUrl);
       setPdfUrl(null);
     }
+  };
+
+  const closeFormViewer = () => {
+    setFormHtml(null);
   };
 
   if (loading) return <p className="text-gray-500">Cargando tablero...</p>;
@@ -183,7 +268,8 @@ export default function KanbanBoard() {
               draggable={isManager}
               onDragStart={() => {}}
               onDrop={handleDrop}
-              onCardClick={handleCardClick}
+              onFormClick={handleFormClick}
+              onPdfClick={handlePdfClick}
             />
           );
         })}
@@ -200,11 +286,13 @@ export default function KanbanBoard() {
       )}
 
       {/* PDF Loading overlay */}
-      {pdfLoading && (
+      {(pdfLoading || formLoading) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="flex flex-col items-center gap-3">
             <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-            <p className="text-white font-medium">Cargando PDF...</p>
+            <p className="text-white font-medium">
+              {pdfLoading ? 'Cargando PDF...' : 'Cargando formulario...'}
+            </p>
           </div>
         </div>
       )}
@@ -214,18 +302,39 @@ export default function KanbanBoard() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-2xl w-[90vw] h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-4 py-3 border-b">
-              <h3 className="text-sm font-semibold text-gray-700">Visor de PDF</h3>
+              <h3 className="text-sm font-semibold text-gray-700">📄 Reporte PDF</h3>
               <button
                 onClick={closePdfViewer}
                 className="px-3 py-1 bg-red-50 text-red-600 rounded-md hover:bg-red-100 text-sm font-medium"
               >
-                Cerrar PDF
+                Cerrar
               </button>
             </div>
             <iframe
               src={pdfUrl}
               className="flex-1 w-full"
-              title="PDF del ensayo"
+              title="Reporte PDF del ensayo"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Form Viewer Frame */}
+      {formHtml && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-2xl w-[90vw] h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <h3 className="text-sm font-semibold text-gray-700">📋 Formulario Completado</h3>
+              <button
+                onClick={closeFormViewer}
+                className="px-3 py-1 bg-red-50 text-red-600 rounded-md hover:bg-red-100 text-sm font-medium"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div
+              className="flex-1 overflow-auto p-6"
+              dangerouslySetInnerHTML={{ __html: formHtml }}
             />
           </div>
         </div>

@@ -39,8 +39,8 @@ export default function FormTemplateCatalog() {
   const fetchTemplates = async () => {
     setLoading(true);
     try {
-      const response = await api<{ data: FormTemplate[] }>('/api/form-templates');
-      setTemplates(response.data || []);
+      const data = await api<FormTemplate[]>('/api/form-templates');
+      setTemplates(data);
     } catch {
       setError('Error al cargar el catálogo de templates');
     } finally {

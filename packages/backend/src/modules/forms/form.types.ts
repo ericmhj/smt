@@ -69,6 +69,8 @@ export interface FormResponse {
   slug: string;
   isActive: boolean;
   currentVersion: number;
+  templateId: string | null;
+  formType: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

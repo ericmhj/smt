@@ -13,8 +13,13 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Tenants', href: '/admin/tenants', roles: ['platform_admin'] },
+  { label: 'Formularios Padre', href: '/platform/form-templates', roles: ['platform_admin'] },
+  { label: 'Reglas de Validación', href: '/platform/validation-rules', roles: ['platform_admin'] },
+  { label: 'Reglas de Cálculo', href: '/platform/calculation-rules', roles: ['platform_admin'] },
+  { label: 'Templates de Reporte', href: '/platform/report-templates', roles: ['platform_admin'] },
+  { label: 'Formularios por Tenant', href: '/platform/tenant-forms', roles: ['platform_admin'] },
   { label: 'Estado de los Ensayos', href: '/kanban', roles: ['superusuario', 'admin', 'manager'] },
-  { label: 'Usuarios', href: '/users', roles: ['superusuario', 'admin'] },
+  { label: 'Usuarios', href: '/users', roles: ['superusuario', 'admin', 'manager'] },
   { label: 'Formularios', href: '/forms', roles: ['superusuario', 'admin', 'manager'] },
   { label: 'Asignaciones', href: '/assignments', roles: ['superusuario', 'admin', 'manager'] },
   { label: 'Clientes', href: '/clientes', roles: ['manager', 'asistente'] },
@@ -54,6 +59,8 @@ export default function Sidebar() {
     if (!item.roles.includes(user.role)) return false;
     // Hide "Tenants" link when inside a tenant subdomain
     if (item.href === '/admin/tenants' && isInsideTenant) return false;
+    // Hide platform items when inside a tenant subdomain
+    if (item.href.startsWith('/platform/') && isInsideTenant) return false;
     return true;
   });
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { extractTenantSlug } from '@/lib/tenant';
 import ReapplyButton from './ReapplyButton';
 
 export interface ReactivoItem {
@@ -31,7 +32,7 @@ export default function ReactivoList({ reactivos, onReapply }: ReactivoListProps
     try {
       const token = localStorage.getItem('access_token');
       const res = await fetch(`http://localhost:3001/api/reactivos/${reactivoId}/pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, 'X-Tenant-Slug': extractTenantSlug() },
       });
       if (res.ok) {
         const blob = await res.blob();

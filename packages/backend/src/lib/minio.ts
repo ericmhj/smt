@@ -1,20 +1,19 @@
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-  ListObjectsV2Command,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import * as Minio from 'minio';
+import { Readable } from 'node:stream';
 
-const s3Client = new S3Client({
-  endpoint: process.env.MINIO_ENDPOINT || 'http://localhost:3900',
+const endpoint = (process.env.MINIO_ENDPOINT || 'http://localhost:3900').replace(/^https?:\/\//, '');
+const portMatch = endpoint.match(/:(\d+)$/);
+const host = portMatch ? endpoint.replace(`:${portMatch[1]}`, '') : endpoint;
+const port = portMatch ? parseInt(portMatch[1], 10) : 3900;
+
+const minioClient = new Minio.Client({
+  endPoint: host,
+  port,
+  useSSL: process.env.MINIO_USE_SSL === 'true',
+  accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
+  secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
   region: process.env.MINIO_REGION || 'garage',
-  credentials: {
-    accessKeyId: process.env.MINIO_ACCESS_KEY || 'minioadmin',
-    secretAccessKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
-  },
-  forcePathStyle: true, // Required for S3-compatible storage
+  pathStyle: true,
 });
 
 const BUCKET = process.env.MINIO_BUCKET || 'sgr-files';
@@ -28,7 +27,7 @@ export function tenantStorageKey(slug: string, path: string): string {
 }
 
 /**
- * Upload a file to MinIO/S3.
+ * Upload a file to MinIO/Garage.
  * If tenantSlug is provided, the key is prefixed with the tenant slug.
  */
 export async function uploadFile(
@@ -38,21 +37,14 @@ export async function uploadFile(
   tenantSlug?: string,
 ): Promise<void> {
   const finalKey = tenantSlug ? tenantStorageKey(tenantSlug, key) : key;
-  await s3Client.send(
-    new PutObjectCommand({
-      Bucket: BUCKET,
-      Key: finalKey,
-      Body: buffer,
-      ContentType: mimeType,
-    }),
-  );
+  await minioClient.putObject(BUCKET, finalKey, buffer, buffer.length, {
+    'Content-Type': mimeType,
+  });
 }
 
 /**
  * Generate a presigned download URL for a file.
  * If tenantSlug is provided, the key is prefixed with the tenant slug.
- * Backward compatibility: if the key doesn't contain a slash prefix matching a tenant,
- * it's treated as belonging to the 'default' tenant.
  */
 export async function getFileUrl(
   key: string,
@@ -61,66 +53,51 @@ export async function getFileUrl(
 ): Promise<string> {
   let finalKey = key;
   if (tenantSlug) {
-    // If key already starts with a tenant prefix, use as-is
     if (!key.startsWith(`${tenantSlug}/`)) {
       finalKey = tenantStorageKey(tenantSlug, key);
     }
   } else if (!key.includes('/')) {
-    // Backward compat: non-prefixed keys map to "default" tenant
     finalKey = tenantStorageKey('default', key);
   }
 
-  const command = new GetObjectCommand({
-    Bucket: BUCKET,
-    Key: finalKey,
-  });
-  return getSignedUrl(s3Client, command, { expiresIn });
+  return minioClient.presignedGetObject(BUCKET, finalKey, expiresIn);
 }
 
 /**
- * Delete a file from MinIO/S3.
+ * Delete a file from MinIO/Garage.
  * If tenantSlug is provided, the key is prefixed with the tenant slug.
  */
 export async function deleteFile(key: string, tenantSlug?: string): Promise<void> {
   const finalKey = tenantSlug ? tenantStorageKey(tenantSlug, key) : key;
-  await s3Client.send(
-    new DeleteObjectCommand({
-      Bucket: BUCKET,
-      Key: finalKey,
-    }),
-  );
+  await minioClient.removeObject(BUCKET, finalKey);
 }
 
 /**
  * Delete all objects with a given prefix (used for tenant cleanup).
  */
 export async function deleteAllWithPrefix(prefix: string): Promise<void> {
-  let continuationToken: string | undefined;
+  const objectsList: string[] = [];
+  const stream = minioClient.listObjectsV2(BUCKET, prefix, true);
 
-  do {
-    const response = await s3Client.send(
-      new ListObjectsV2Command({
-        Bucket: BUCKET,
-        Prefix: prefix,
-        ContinuationToken: continuationToken,
-      }),
-    );
+  await new Promise<void>((resolve, reject) => {
+    stream.on('data', (obj) => {
+      if (obj.name) objectsList.push(obj.name);
+    });
+    stream.on('error', reject);
+    stream.on('end', resolve);
+  });
 
-    if (response.Contents) {
-      for (const obj of response.Contents) {
-        if (obj.Key) {
-          await s3Client.send(
-            new DeleteObjectCommand({
-              Bucket: BUCKET,
-              Key: obj.Key,
-            }),
-          );
-        }
-      }
-    }
-
-    continuationToken = response.NextContinuationToken;
-  } while (continuationToken);
+  if (objectsList.length > 0) {
+    await minioClient.removeObjects(BUCKET, objectsList);
+  }
 }
 
-export { s3Client, BUCKET };
+/**
+ * Get a file as a readable stream.
+ */
+export async function getFileStream(key: string, tenantSlug?: string): Promise<Readable> {
+  const finalKey = tenantSlug ? tenantStorageKey(tenantSlug, key) : key;
+  return minioClient.getObject(BUCKET, finalKey);
+}
+
+export { minioClient, BUCKET };

@@ -29,7 +29,17 @@ export class FormTemplateService {
   constructor(private db: Database) {}
 
   /**
-   * List all active form templates.
+   * List all form templates (active and inactive) for admin management.
+   */
+  async listAll() {
+    const results = await this.db
+      .select()
+      .from(formTemplates);
+    return results;
+  }
+
+  /**
+   * List all active form templates (for tenant catalog).
    */
   async list() {
     const results = await this.db
@@ -175,9 +185,9 @@ export class FormTemplateService {
       if (name && !seenFieldNames.has(name)) {
         seenFieldNames.add(name);
         if (!currentSection) {
-          // Create a default section for fields before any section heading
-          currentSection = { sectionName: 'default', fields: [] };
-          sections.push(currentSection);
+          // Skip fields that appear before any section heading
+          // (e.g., viewport meta tags, hidden fields in the header)
+          continue;
         }
         currentSection.fields.push(name);
       }

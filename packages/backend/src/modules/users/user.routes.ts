@@ -11,7 +11,7 @@ export async function userRoutes(
 ): Promise<void> {
   const userService = new UserService(opts.keycloakAdmin);
 
-  const adminRoles = requireRole(['superusuario', 'admin']);
+  const adminRoles = requireRole(['superusuario', 'admin', 'manager']);
   const managerRoles = requireRole(['superusuario', 'admin', 'manager', 'asistente']);
 
   // GET /api/users/tecnicos — list technicians (accessible to manager/asistente for ticket assignment)

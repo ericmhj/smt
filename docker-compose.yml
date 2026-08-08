@@ -49,6 +49,7 @@ services:
       start_period: 30s
     networks:
       - sgr-network
+      - keycloak-external
 
   frontend:
     build:
@@ -97,7 +98,7 @@ services:
       - sgr-network
 
   redis:
-    image: redis:7-alpine
+    image: valkey/valkey:8-alpine
     container_name: sgr-redis
     restart: unless-stopped
     ports:
@@ -185,4 +186,7 @@ volumes:
 
 networks:
   sgr-network:
+    driver: bridge
+  keycloak-external:
+    name: keycloak-external
     driver: bridge

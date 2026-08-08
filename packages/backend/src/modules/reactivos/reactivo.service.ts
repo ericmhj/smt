@@ -370,6 +370,19 @@ export class ReactivoService {
       }
     }
 
+    // 6c. Compute calculations (if not legacy form)
+    if (!isLegacy) {
+      try {
+        const { compute } = await import('../calculation/calculation-engine.js');
+        const calcResult = await compute(this.db, reactivo.formId, form.formType || 'legacy', responses);
+        if (Object.keys(calcResult.computedValues).length > 0) {
+          Object.assign(responses, calcResult.computedValues);
+        }
+      } catch (err) {
+        console.error('[ReactivoService] Calculation engine error (non-blocking):', err);
+      }
+    }
+
     // 7. Update reactivo: responses + state='en_revision'
     const updateResult = await this.db
       .update(reactivos)

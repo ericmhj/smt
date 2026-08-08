@@ -95,6 +95,14 @@ export function validateStructure(
   const requiredSections: string[] = [];
 
   for (const section of parentFieldsMetadata.sections) {
+    // Skip the "default" section — it's a parser artifact for fields before any section heading
+    if (section.sectionName === 'default') {
+      // Still require the fields from the default section, just not the section heading itself
+      for (const field of section.fields) {
+        requiredFields.push(field);
+      }
+      continue;
+    }
     requiredSections.push(section.sectionName);
     for (const field of section.fields) {
       requiredFields.push(field);

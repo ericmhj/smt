@@ -22,6 +22,7 @@ export default function FormList({ forms, onToggleActive, onDelete, userRole }: 
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Template</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Versión</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
@@ -39,6 +40,15 @@ export default function FormList({ forms, onToggleActive, onDelete, userRole }: 
                   </button>
                   {form.description && (
                     <p className="text-xs text-gray-500 mt-0.5">{form.description}</p>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {form.templateId ? (
+                    <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                      {form.formType || 'template'}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-400">Manual</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-500">v{form.currentVersion}</td>

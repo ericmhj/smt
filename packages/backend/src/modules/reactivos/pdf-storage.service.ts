@@ -25,7 +25,8 @@ export class PdfStorageService {
    * Returns the storage key.
    */
   async generateAndStore(reactivoId: string, tenantSlug: string): Promise<string> {
-    const pdfBuffer = await this.pdfService.generate(reactivoId);
+    const schemaName = `sgr_${tenantSlug.replace(/-/g, '_')}`;
+    const pdfBuffer = await this.pdfService.generate(reactivoId, schemaName);
     const storageKey = `pdfs/${reactivoId}.pdf`;
 
     await uploadFile(storageKey, pdfBuffer, 'application/pdf', tenantSlug);

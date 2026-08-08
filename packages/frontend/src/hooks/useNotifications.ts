@@ -34,12 +34,16 @@ export function useNotifications() {
     const token = getAccessToken();
     if (!token) return false;
 
+    // Skip notifications when no tenant context (e.g. platform_admin on localhost)
+    const tenantSlug = extractTenantSlug();
+    if (!tenantSlug || tenantSlug === 'localhost') return false;
+
     try {
       const headers = buildHeaders();
 
       const res = await fetch(`${API_BASE_URL}/api/notifications`, { headers });
 
-      // Stop polling if auth fails
+      // Stop polling silently if auth/permission fails (e.g. platform_admin has no tenant context)
       if (res.status === 401 || res.status === 403) return false;
 
       if (res.ok) {

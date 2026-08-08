@@ -28,6 +28,9 @@ import { ticketRoutes } from './modules/tickets/ticket.routes.js';
 import { platformRoutes } from './modules/platform/platform.routes.js';
 import { formTemplateRoutes } from './modules/form-templates/form-template.routes.js';
 import { overrideRoutes } from './modules/validation/override.routes.js';
+import { ruleTemplateRoutes } from './modules/validation/rule-template.routes.js';
+import { calculationRuleRoutes } from './modules/calculation/calculation-rule.routes.js';
+import { reportTemplatesModule } from './modules/report-templates/index.js';
 import { KeycloakAdminClient } from './modules/tenant/keycloak-admin-client.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -86,9 +89,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(authRoutes, { authService, authStrategy });
 
   // Register platform admin routes (must be before tenant-scoped routes)
-  await app.register(platformRoutes, { db });
-
-  // Register user routes
+  // Note: keycloakAdmin is created here so it's available for both platform and user routes
   const keycloakAdmin = new KeycloakAdminClient({
     baseUrl: config.keycloakAdmin?.baseUrl ?? '',
     realm: config.keycloakAdmin?.targetRealm ?? '',
@@ -96,6 +97,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     adminUser: config.keycloakAdmin?.adminUser ?? '',
     adminPassword: config.keycloakAdmin?.adminPassword ?? '',
   });
+  await app.register(platformRoutes, { db, keycloakAdmin, standaloneAuth: config.standaloneAuth });
+
+  // Register user routes
   await app.register(userRoutes, { keycloakAdmin });
 
   // Register form template routes (platform-level catalog)
@@ -106,6 +110,15 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Register validation override routes (tenant-level rule overrides)
   await app.register(overrideRoutes, { db });
+
+  // Register validation rule template routes (platform-level rule CRUD)
+  await app.register(ruleTemplateRoutes, { db });
+
+  // Register calculation rule template routes (platform-level calculation CRUD)
+  await app.register(calculationRuleRoutes, { db });
+
+  // Register report templates module (platform CRUD + tenant activations/overrides)
+  await app.register(reportTemplatesModule, { db });
 
   // Register assignment routes
   await app.register(assignmentRoutes, { db });

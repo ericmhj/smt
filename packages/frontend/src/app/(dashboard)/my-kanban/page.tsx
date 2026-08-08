@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { extractTenantSlug } from '@/lib/tenant';
 import { useAuth } from '@/contexts/AuthContext';
 import KanbanColumn from '@/components/kanban/KanbanColumn';
 import { KanbanCardData } from '@/components/kanban/KanbanCard';
@@ -56,6 +57,7 @@ export default function MyKanbanPage() {
   // EnsayoFormModal state
   const [formHtml, setFormHtml] = useState<string>('');
   const [formInitialResponses, setFormInitialResponses] = useState<Record<string, unknown> | undefined>(undefined);
+  const [formReadOnly, setFormReadOnly] = useState(false);
 
   // RejectionInfoModal state
   const [rejectionReason, setRejectionReason] = useState<string>('');
@@ -149,7 +151,7 @@ export default function MyKanbanPage() {
         const token = localStorage.getItem('access_token');
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/reactivos/${cardId}/pdf`,
-          { headers: { Authorization: `Bearer ${token}` } },
+          { headers: { Authorization: `Bearer ${token}`, 'X-Tenant-Slug': extractTenantSlug() } },
         );
         if (res.ok) {
           const blob = await res.blob();
@@ -172,6 +174,7 @@ export default function MyKanbanPage() {
     setActiveReactivoId(null);
     setFormHtml('');
     setFormInitialResponses(undefined);
+    setFormReadOnly(false);
   };
 
   const closePdfViewer = () => {
@@ -203,6 +206,109 @@ export default function MyKanbanPage() {
     }
   };
 
+  const handleFormClick = async (cardId: string) => {
+    if (activeModal !== 'none') return;
+    setPdfLoading(true);
+
+    // Find card state
+    let cardState: string | null = null;
+    for (const col of data) {
+      const card = col.cards.find((c) => c.id === cardId);
+      if (card) { cardState = card.state; break; }
+    }
+
+    // Only editable if state is 'pendiente' AND role is 'tecnico'
+    const canEdit = cardState === 'pendiente' && user?.role === 'tecnico';
+
+    try {
+      const formData = await api<FormData>(`/api/reactivos/${cardId}/form`).catch(() => null);
+      const detail = await api<ReactivoDetail>(`/api/reactivos/${cardId}`);
+
+      if (formData?.sanitizedHtml) {
+        setFormHtml(formData.sanitizedHtml);
+        setFormInitialResponses(
+          detail.responses && Object.keys(detail.responses).length > 0
+            ? detail.responses
+            : undefined,
+        );
+        setFormReadOnly(!canEdit);
+        setActiveReactivoId(cardId);
+        setActiveModal('ensayo');
+      } else {
+        // Fallback: show responses as read-only
+        setRejectionReason('');
+        setRejectionFormName(detail.form?.name || detail.formName || '');
+        setRejectionResponses(detail.responses || {});
+        setActiveReactivoId(cardId);
+        setActiveModal('rejection');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error de conexión';
+      setToast({ message, type: 'error' });
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handlePdfClick = async (cardId: string) => {
+    if (activeModal !== 'none' || pdfUrl) return;
+    setPdfLoading(true);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const tenantSlug = extractTenantSlug();
+
+    const fetchPdf = async (token: string) => {
+      return fetch(`${apiUrl}/api/reactivos/${cardId}/pdf`, {
+        headers: { Authorization: `Bearer ${token}`, 'X-Tenant-Slug': tenantSlug },
+      });
+    };
+
+    try {
+      let token = localStorage.getItem('access_token') || '';
+      let res = await fetchPdf(token);
+
+      // If 401, attempt token refresh and retry
+      if (res.status === 401) {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          const refreshRes = await fetch(`${apiUrl}/api/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Tenant-Slug': tenantSlug },
+            body: JSON.stringify({ refreshToken }),
+          });
+          if (refreshRes.ok) {
+            const data = await refreshRes.json();
+            localStorage.setItem('access_token', data.accessToken);
+            if (data.refreshToken) localStorage.setItem('refresh_token', data.refreshToken);
+            document.cookie = `sgr-token=${encodeURIComponent(data.accessToken)}; path=/; SameSite=Lax`;
+            token = data.accessToken;
+            res = await fetchPdf(token);
+          } else {
+            // Refresh failed — redirect to login
+            window.location.href = '/login';
+            return;
+          }
+        } else {
+          window.location.href = '/login';
+          return;
+        }
+      }
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        setPdfUrl(url);
+        setActiveModal('pdf');
+      } else {
+        setToast({ message: `Error al generar el PDF (${res.status})`, type: 'error' });
+      }
+    } catch {
+      setToast({ message: 'Error de conexión', type: 'error' });
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   if (loading) return <p className="text-gray-500">Cargando tablero...</p>;
 
   const totalCards = data.reduce((sum, col) => sum + col.cards.length, 0);
@@ -231,7 +337,8 @@ export default function MyKanbanPage() {
               draggable={false}
               onDragStart={() => {}}
               onDrop={() => {}}
-              onCardClick={handleCardClick}
+              onFormClick={handleFormClick}
+              onPdfClick={handlePdfClick}
             />
           );
         })}
@@ -253,6 +360,7 @@ export default function MyKanbanPage() {
           reactivoId={activeReactivoId}
           htmlContent={formHtml}
           initialResponses={formInitialResponses}
+          readOnly={formReadOnly}
           onClose={closeModal}
           onSubmitSuccess={handleSubmitSuccess}
         />
