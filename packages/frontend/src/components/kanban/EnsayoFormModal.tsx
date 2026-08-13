@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { api, ApiError } from '@/lib/api';
-import { FORM_STYLES } from '@/lib/form-styles';
 
 interface ValidationError {
   fieldName: string;
@@ -29,259 +28,225 @@ export default function EnsayoFormModal({
   onClose,
   onSubmitSuccess,
 }: EnsayoFormModalProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<string[]>([]);
-  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+  const [opened, setOpened] = useState(false);
+  const winRef = useRef<Window | null>(null);
 
-  // Strip <form> tags from HTML to avoid nested forms
-  const strippedHtml = htmlContent
-    .replace(/<form[^>]*>/gi, '')
-    .replace(/<\/form>/gi, '');
+  const openFormWindow = useCallback(() => {
+    // Build the full standalone HTML with submit logic
+    const token = localStorage.getItem('access_token') || '';
+    const tenantSlug = window.location.hostname.split('.')[0] || 'default';
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-  // The HTML already contains its own <style> block with original form styles
-  const styledHtml = strippedHtml;
+    // Strip <form> tags to avoid conflicts
+    let formHtml = htmlContent.replace(/<form[^>]*>/gi, '').replace(/<\/form>/gi, '');
 
-  // Inject initial values after the HTML is rendered
-  useEffect(() => {
-    if (!containerRef.current || !initialResponses) return;
-    const timer = setTimeout(() => {
-      const container = containerRef.current;
-      if (!container) return;
-      for (const [key, value] of Object.entries(initialResponses)) {
-        const element = container.querySelector(`[name="${key}"]`) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
-        if (element) {
-          element.value = String(value ?? '');
+    // Inject initial values as a global variable BEFORE the form scripts run
+    let initScript = '';
+    if (initialResponses && Object.keys(initialResponses).length > 0) {
+      initScript = `
+<script>
+// Pre-load saved responses as global for the form scripts to use at init time
+window.__savedResponses = ${JSON.stringify(initialResponses)};
+window.__isReadOnly = ${readOnly};
+</script>`;
+    }
+
+    // Post-load script that fills values AFTER dynamic content is generated
+    const postLoadScript = initialResponses && Object.keys(initialResponses).length > 0 ? `
+<script>
+window.addEventListener('load', function() {
+  setTimeout(function() {
+    var values = window.__savedResponses || {};
+    
+    // Fill all existing inputs
+    for (var key in values) {
+      var el = document.querySelector('[name="' + key + '"]');
+      if (el) {
+        el.value = String(values[key] || '');
+        el.dispatchEvent(new Event('input', {bubbles:true}));
+        el.dispatchEvent(new Event('change', {bubbles:true}));
+      }
+    }
+    
+    // Trigger NOM-025 calculations
+    if (typeof calcularReglasNOM025 === 'function') calcularReglasNOM025();
+    if (typeof initAllAreaBlocks === 'function') initAllAreaBlocks();
+    
+    // Wait for dynamic tables then fill again
+    setTimeout(function() {
+      for (var key in values) {
+        var el = document.querySelector('[name="' + key + '"]');
+        if (el && !el.value && values[key]) {
+          el.value = String(values[key] || '');
         }
       }
-      // If readOnly, disable all inputs
-      if (readOnly) {
-        container.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
-          el.disabled = true;
-          el.style.opacity = '1';
-          el.style.color = '#1e293b';
+      // Disable if readOnly
+      if (window.__isReadOnly) {
+        document.querySelectorAll('input,textarea,select').forEach(function(el){
+          el.disabled=true; el.style.opacity='1'; el.style.color='#1e293b';
         });
       }
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [initialResponses, strippedHtml, readOnly]);
+    }, 1000);
+  }, 500);
+});
+</script>` : '';
 
-  // Apply visual error indicators to the DOM
-  const applyValidationErrorsToDOM = useCallback((errors: ValidationError[]) => {
-    const container = containerRef.current;
-    if (!container) return;
+    // Submit bar + logic
+    const submitScript = readOnly ? `
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:2px solid #6b7280;padding:16px 24px;display:flex;gap:12px;justify-content:center;z-index:9999;box-shadow:0 -4px 12px rgba(0,0,0,0.1)';
+  bar.innerHTML = '<button onclick="window.close()" style="background:#6b7280;color:white;border:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Cerrar</button>';
+  document.body.appendChild(bar);
+  document.body.style.paddingBottom = '80px';
+});
+</script>` : `
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:2px solid #1a6b3a;padding:16px 24px;display:flex;gap:12px;justify-content:center;z-index:9999;box-shadow:0 -4px 12px rgba(0,0,0,0.1)';
+  bar.innerHTML = '<button id="btn-submit" style="background:#1a6b3a;color:white;border:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Enviar Ensayo</button><button id="btn-cancel" style="background:#6b7280;color:white;border:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Cancelar</button>';
+  document.body.appendChild(bar);
+  document.body.style.paddingBottom = '80px';
 
-    for (const err of errors) {
-      const element = container.querySelector(`[name="${err.fieldName}"]`) as HTMLElement | null;
-      if (element) {
-        element.classList.add('field-error-border');
-        // Create and inject the error message div
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'field-error';
-        errorDiv.setAttribute('data-field-error', err.fieldName);
-        errorDiv.textContent = err.message;
-        element.insertAdjacentElement('afterend', errorDiv);
-      }
-    }
-
-    // Scroll to the first errored field
-    if (errors.length > 0) {
-      const firstField = container.querySelector(`[name="${errors[0].fieldName}"]`) as HTMLElement | null;
-      if (firstField) {
-        firstField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  }, []);
-
-  // Clear visual error indicators from a specific field
-  const clearFieldError = useCallback((fieldName: string) => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const element = container.querySelector(`[name="${fieldName}"]`) as HTMLElement | null;
-    if (element) {
-      element.classList.remove('field-error-border');
-    }
-    const errorDiv = container.querySelector(`[data-field-error="${fieldName}"]`);
-    if (errorDiv) {
-      errorDiv.remove();
-    }
-  }, []);
-
-  // Clear all visual error indicators
-  const clearAllErrors = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    container.querySelectorAll('.field-error-border').forEach((el) => {
-      el.classList.remove('field-error-border');
-    });
-    container.querySelectorAll('.field-error').forEach((el) => {
-      el.remove();
-    });
-  }, []);
-
-  // Listen for field changes to clear individual errors
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || validationErrors.length === 0) return;
-
-    const handleFieldChange = (e: Event) => {
-      const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-      if (!target || !target.name) return;
-
-      const hasError = validationErrors.some((err) => err.fieldName === target.name);
-      if (hasError) {
-        clearFieldError(target.name);
-        setValidationErrors((prev) => prev.filter((err) => err.fieldName !== target.name));
-      }
-    };
-
-    container.addEventListener('input', handleFieldChange);
-    container.addEventListener('change', handleFieldChange);
-
-    return () => {
-      container.removeEventListener('input', handleFieldChange);
-      container.removeEventListener('change', handleFieldChange);
-    };
-  }, [validationErrors, clearFieldError]);
-
-  const handleSubmit = async () => {
-    setError('');
-    setFieldErrors([]);
-    setValidationErrors([]);
-    clearAllErrors();
-
-    if (!containerRef.current) return;
-
-    // Collect form data from all named inputs in the container
-    const inputs = containerRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('[name]');
-    const responses: Record<string, unknown> = {};
-    inputs.forEach((el) => {
-      if (el.name) {
-        responses[el.name] = el.value;
-      }
-    });
-
-    setSubmitting(true);
+  document.getElementById('btn-cancel').onclick = function() { window.close(); };
+  document.getElementById('btn-submit').onclick = function() {
+    var btn = this; btn.textContent = 'Enviando...'; btn.disabled = true;
+    
+    // Force canvas data serialization by reading Konva layer directly
     try {
-      await api(`/api/reactivos/${reactivoId}/submit`, {
-        method: 'POST',
-        body: JSON.stringify({ responses }),
-      });
-      onSubmitSuccess();
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 422 && Array.isArray(err.data.errors)) {
-        const errors = err.data.errors as ValidationError[];
-        setValidationErrors(errors);
-        // Apply visual indicators after state update
-        setTimeout(() => applyValidationErrorsToDOM(errors), 0);
-      } else {
-        const message = err instanceof Error ? err.message : 'Error al enviar el ensayo';
-        if (message.includes('Respuestas inválidas')) {
-          setFieldErrors(message.replace('Respuestas inválidas: ', '').split(', '));
-        } else {
-          setError(message);
+      var planoInput = document.getElementById('plano-data');
+      if (planoInput && !planoInput.value) {
+        // Try to serialize from Konva stage if available
+        var stage = window.Konva && Konva.stages && Konva.stages[0];
+        if (stage) {
+          var layer = stage.getLayers()[stage.getLayers().length - 1];
+          if (layer) {
+            var areas = [];
+            layer.find('.area-shape').forEach(function(s) {
+              var d = s.getAttr('areaData') || {};
+              areas.push({nombre:d.nombre||'',largo:d.largo||'',ancho:d.ancho||'',alto:d.alto||'',
+                id:s.getAttr('areaId')||'',x:Math.round(s.x()),y:Math.round(s.y()),
+                pixelW:Math.round(s.width()*s.scaleX()),pixelH:Math.round(s.height()*s.scaleY())});
+            });
+            if (areas.length > 0) planoInput.value = JSON.stringify(areas);
+          }
         }
       }
-    } finally {
-      setSubmitting(false);
-    }
+    } catch(e) { console.log('Canvas serialize error:', e); }
+
+    // Export canvas as PNG base64 using Konva stage API
+    var canvasImage = '';
+    try {
+      var stage = window.Konva && Konva.stages && Konva.stages[0];
+      if (stage) {
+        canvasImage = stage.toDataURL({ pixelRatio: 2 });
+      }
+    } catch(e) { console.log('Canvas export error:', e); }
+    
+    // Collect ALL inputs including dynamically generated ones
+    var inputs = document.querySelectorAll('input,select,textarea');
+    var r = {};
+    inputs.forEach(function(el) {
+      var n = el.getAttribute('name'); if(!n) return;
+      if(el.type==='checkbox') r[n]=el.checked;
+      else if(el.type==='radio'){if(el.checked)r[n]=el.value;}
+      else if(el.type==='number') r[n]=el.value===''?null:Number(el.value);
+      else r[n]=el.value;
+    });
+    // Capture hidden inputs (plano-data, etc)
+    document.querySelectorAll('input[type="hidden"]').forEach(function(el) {
+      var n = el.getAttribute('name') || el.getAttribute('id');
+      if(n && el.value) r[n] = el.value;
+    });
+    // Store canvas image and plano data
+    if (canvasImage) r['__canvas_image'] = canvasImage;
+    var pd = document.getElementById('plano-data');
+    if (pd && pd.value) r['plano_areas_json'] = pd.value;
+    // Capture full rendered HTML for PDF (exact copy of what user sees)
+    try {
+      var clone = document.documentElement.cloneNode(true);
+      clone.querySelectorAll('script').forEach(function(s){s.remove();});
+      var fixedBar = clone.querySelector('div[style*="position:fixed"]');
+      if(fixedBar) fixedBar.remove();
+      r['__rendered_html'] = clone.outerHTML;
+    } catch(e) {}
+    fetch('${apiBase}/api/reactivos/${reactivoId}/submit',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer ${token}','X-Tenant-Slug':'${tenantSlug}'},
+      body:JSON.stringify({responses:r})
+    })
+    .then(function(res){if(!res.ok)return res.json().then(function(d){throw new Error(d.message||'Error')});return res.json();})
+    .then(function(){
+      document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;font-family:system-ui"><div style="width:64px;height:64px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;font-size:32px">\\u2713</div><h2 style="color:#166534;margin:0">Ensayo enviado correctamente</h2><p style="color:#6b7280">Esta ventana se cerrara...</p></div>';
+      setTimeout(function(){window.close();},2000);
+    })
+    .catch(function(err){alert('Error: '+err.message);btn.textContent='Enviar Ensayo';btn.disabled=false;});
   };
+});
+</script>`;
 
-  // Compute per-section error counts for summary footer
-  const sectionErrorCounts = validationErrors.reduce<Record<string, number>>((acc, err) => {
-    acc[err.sectionName] = (acc[err.sectionName] || 0) + 1;
-    return acc;
-  }, {});
+    // Build full HTML document
+    const fullHtml = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${readOnly ? 'Ver Formulario' : 'Llenar Ensayo'}</title>
+${initScript}
+</head>
+<body>${formHtml}${postLoadScript}${submitScript}</body>
+</html>`;
 
-  const hasValidationErrors = validationErrors.length > 0;
+    // Open new window and write HTML
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.open();
+      win.document.write(fullHtml);
+      win.document.close();
+      winRef.current = win;
+      setOpened(true);
+
+      // Poll for window close to trigger callback
+      const interval = setInterval(() => {
+        if (win.closed) {
+          clearInterval(interval);
+          onSubmitSuccess();
+        }
+      }, 1000);
+    }
+  }, [htmlContent, initialResponses, readOnly, reactivoId, onSubmitSuccess]);
+
+  // Auto-open on mount
+  useEffect(() => {
+    if (!opened) {
+      openFormWindow();
+    }
+  }, [opened, openFormWindow]);
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold text-gray-800">
-            {readOnly ? 'Ver Formulario' : 'Llenar Ensayo'}
-          </h2>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl p-8 text-center max-w-md">
+        <h2 className="text-lg font-semibold text-gray-800 mb-3">
+          {readOnly ? 'Formulario abierto' : 'Formulario abierto en nueva ventana'}
+        </h2>
+        <p className="text-sm text-gray-500 mb-4">
+          {readOnly
+            ? 'El formulario se abrió en una nueva pestaña. Ciérrela cuando termine.'
+            : 'Complete el formulario en la nueva pestaña. Al enviar, esta vista se actualizará automáticamente.'}
+        </p>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={openFormWindow}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
+          >
+            Reabrir ventana
+          </button>
           <button
             onClick={onClose}
-            disabled={submitting}
-            className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm"
           >
-            ×
+            Cerrar
           </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">{error}</div>
-          )}
-          {fieldErrors.length > 0 && (
-            <div className="mb-4 p-3 bg-yellow-50 text-yellow-800 rounded-md text-sm">
-              <p className="font-medium mb-1">Campos con errores:</p>
-              <ul className="list-disc list-inside">
-                {fieldErrors.map((err, i) => (
-                  <li key={i}>{err}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <style dangerouslySetInnerHTML={{ __html: `
-            .field-error-border { border-color: #ef4444 !important; background: #fef2f2 !important; }
-            .field-error { color: #dc2626; font-size: 11px; margin-top: 2px; padding: 2px 4px; }
-          ` }} />
-
-          <div
-            ref={containerRef}
-            className="prose prose-sm max-w-none [&_input]:border [&_input]:border-gray-300 [&_input]:rounded [&_input]:px-2 [&_input]:py-1 [&_input]:w-full [&_input]:mb-3 [&_select]:border [&_select]:border-gray-300 [&_select]:rounded [&_select]:px-2 [&_select]:py-1 [&_select]:w-full [&_select]:mb-3 [&_textarea]:border [&_textarea]:border-gray-300 [&_textarea]:rounded [&_textarea]:px-2 [&_textarea]:py-1 [&_textarea]:w-full [&_textarea]:mb-3 [&_label]:font-medium [&_label]:text-gray-700 [&_label]:block [&_label]:mb-1 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50"
-            dangerouslySetInnerHTML={{ __html: styledHtml }}
-          />
-        </div>
-
-        {/* Validation Error Summary Footer */}
-        {hasValidationErrors && (
-          <div className="px-6 py-3 bg-red-50 border-t border-red-200">
-            <p className="text-sm font-medium text-red-800 mb-1">
-              Errores de validación ({validationErrors.length}):
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(sectionErrorCounts).map(([section, count]) => (
-                <span
-                  key={section}
-                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800"
-                >
-                  {section}: {count}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm"
-          >
-            {readOnly ? 'Cerrar' : 'Cancelar'}
-          </button>
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={submitting || hasValidationErrors}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
-            >
-              {submitting ? 'Enviando...' : 'Enviar Ensayo'}
-            </button>
-          )}
         </div>
       </div>
     </div>

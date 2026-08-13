@@ -236,6 +236,7 @@ export function SectionBuilder({ mode, templateId, initialFormType, initialTenan
 
 function getDefaultTitle(type: TemplateSection['type']): string {
   const titles: Record<string, string> = {
+    cover_page: 'Carátula',
     static: 'Contenido Estático',
     form_content: 'Contenido del Formulario',
     signatures: 'Firmas de Autorización',
@@ -248,6 +249,8 @@ function getDefaultTitle(type: TemplateSection['type']): string {
 
 function getDefaultConfig(type: TemplateSection['type']): Record<string, unknown> {
   switch (type) {
+    case 'cover_page':
+      return { content: '', showDate: true, showTecnico: true };
     case 'static':
       return { content: '' };
     case 'form_content':

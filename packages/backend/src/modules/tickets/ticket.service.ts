@@ -212,7 +212,16 @@ export class TicketService {
       .where(eq(tickets.id, id))
       .returning();
 
-    return this.toResponse(result[0]!);
+    // Also update the associated reactivo's tecnicoId so it appears on the new technician's Kanban
+    const updatedTicket = result[0]!;
+    if (updatedTicket.reactivoId) {
+      await this.db
+        .update(reactivos)
+        .set({ tecnicoId, updatedAt: new Date() })
+        .where(eq(reactivos.id, updatedTicket.reactivoId));
+    }
+
+    return this.toResponse(updatedTicket);
   }
 
   async linkReactivo(ticketId: string, reactivoId: string): Promise<TicketResponse> {

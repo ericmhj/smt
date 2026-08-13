@@ -161,6 +161,7 @@ export function ThemePanel({
   const [margins, setMargins] = useState(currentThemeConfig?.layout?.margins || 'normal');
   const [tableStyle, setTableStyle] = useState(currentThemeConfig?.layout?.tableStyle || 'bordered');
   const [headerStyle, setHeaderStyle] = useState(currentThemeConfig?.layout?.headerStyle || 'full');
+  const [pageSize, setPageSize] = useState((currentThemeConfig?.layout as any)?.pageSize || 'A4');
   const [showLogo, setShowLogo] = useState(currentThemeConfig?.branding?.showLogo ?? true);
   const [showPageNumbers, setShowPageNumbers] = useState(currentThemeConfig?.footer?.showPageNumbers ?? true);
   const [showDate, setShowDate] = useState(currentThemeConfig?.footer?.showDate ?? true);
@@ -241,6 +242,7 @@ export function ThemePanel({
       layout: {
         margins: typeof margins === 'string' ? margins : 'normal',
         pageMargins: typeof margins === 'object' ? margins : undefined,
+        pageSize,
         headerStyle,
         tableStyle,
         separator: 'line',
@@ -448,6 +450,20 @@ export function ThemePanel({
 
             {/* Layout options */}
             <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Tamaño de hoja</label>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                >
+                  <option value="A4">A4 (210×297mm)</option>
+                  <option value="Letter">Carta (216×279mm)</option>
+                  <option value="Legal">Legal (216×356mm)</option>
+                  <option value="A3">A3 (297×420mm)</option>
+                  <option value="Tabloid">Tabloide (279×432mm)</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-xs text-gray-600 mb-1">Estilo tablas</label>
                 <select

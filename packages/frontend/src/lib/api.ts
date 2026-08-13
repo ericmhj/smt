@@ -61,9 +61,11 @@ export async function api<T = unknown>(
     ...(customHeaders as Record<string, string>),
   };
 
-  // Add tenant slug from browser hostname
-  const tenantSlug = extractTenantSlug();
-  headers['X-Tenant-Slug'] = tenantSlug;
+  // Add tenant slug from browser hostname (unless already provided via custom headers)
+  if (!headers['X-Tenant-Slug']) {
+    const tenantSlug = extractTenantSlug();
+    headers['X-Tenant-Slug'] = tenantSlug;
+  }
 
   if (!skipAuth) {
     const token = getAccessToken();

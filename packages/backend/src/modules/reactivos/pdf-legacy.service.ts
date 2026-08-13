@@ -17,6 +17,7 @@ import { users } from '../../db/schema/users.js';
 import { observations } from '../../db/schema/observations.js';
 import { ReactivoError, ReactivoErrorCode } from './reactivo.errors.js';
 import type { ReactivoState } from './reactivo.types.js';
+import { renderFormForPdf } from './pdf-form-renderer.js';
 
 const STATE_LABELS: Record<ReactivoState, string> = {
   pendiente: 'Pendiente',
@@ -87,8 +88,40 @@ export class PdfLegacyService {
     const responses = reactivo.responses as Record<string, unknown>;
     const formHtml = version?.htmlContent || '<p>Sin contenido</p>';
 
-    // Inject responses into the form HTML
-    const filledFormHtml = this.injectResponses(formHtml, responses);
+    // If we have pre-rendered HTML, use it directly as the full document
+    const preRenderedHtml = responses['__rendered_html'] as string;
+    if (preRenderedHtml) {
+      let directHtml = preRenderedHtml;
+      const canvasImage = responses['__canvas_image'] as string;
+      if (canvasImage) {
+        directHtml = directHtml.replace(
+          /<div id="konva-stage">[\s\S]*?<\/div>/,
+          `<img src="${canvasImage}" style="width:100%;max-width:760px;" />`,
+        );
+      }
+      directHtml = directHtml.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
+
+      // Generate PDF directly from the captured HTML
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
+      try {
+        const page = await browser.newPage();
+        await page.setContent(directHtml, { waitUntil: 'load' });
+        const pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true,
+          margin: { top: '15mm', bottom: '15mm', left: '10mm', right: '10mm' },
+        });
+        return Buffer.from(pdfBuffer);
+      } finally {
+        await browser.close();
+      }
+    }
+
+    // Fallback: build PDF from server-side renderer
+    const filledFormHtmlWithRestore = renderFormForPdf(formHtml, responses);
 
     // Build complete HTML document
     const fullHtml = this.buildPdfHtml({
@@ -99,7 +132,7 @@ export class PdfLegacyService {
       attemptNumber: reactivo.attemptNumber,
       rejectionReason: reactivo.rejectionReason,
       createdAt: reactivo.createdAt.toISOString(),
-      filledFormHtml,
+      filledFormHtml: filledFormHtmlWithRestore,
       transitions: transitionsResult.map(t => ({
         from: STATE_LABELS[t.fromState as ReactivoState] || t.fromState,
         to: STATE_LABELS[t.toState as ReactivoState] || t.toState,
@@ -120,7 +153,7 @@ export class PdfLegacyService {
 
     try {
       const page = await browser.newPage();
-      await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
+      await page.setContent(fullHtml, { waitUntil: 'load' });
       const pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,

@@ -56,6 +56,7 @@ export default function ReportTemplatesPage() {
   const [filterFormType, setFilterFormType] = useState('');
   const [tenantForms, setTenantForms] = useState<Array<{ id: string; form_type: string; name: string }>>([]);
   const [themeTarget, setThemeTarget] = useState<{ activationId: string; themeConfig: any; formId?: string } | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Load tenants
   useEffect(() => {
@@ -71,10 +72,10 @@ export default function ReportTemplatesPage() {
       setFilterFormType('');
       return;
     }
-    api<Array<{ id: string; form_type: string | null; name: string }>>(`/api/platform/tenants/${selectedTenant}/forms`)
+    api<Array<{ id: string; form_type: string | null; name: string; is_active: boolean }>>(`/api/platform/tenants/${selectedTenant}/forms`)
       .then((forms) => {
         const items = forms
-          .filter((f) => f.form_type)
+          .filter((f) => f.form_type && f.is_active)
           .map((f) => ({ id: f.id, form_type: f.form_type!, name: f.name }));
         setTenantForms(items);
         if (filterFormType && !items.some((f) => f.id === filterFormType)) {
@@ -92,15 +93,21 @@ export default function ReportTemplatesPage() {
     try {
       let url = '/api/report-templates';
       if (filterFormType) {
-        // filterFormType holds the form ID — filter by tenant_form_id OR by form_type of that form
         const form = tenantForms.find((f) => f.id === filterFormType);
         if (form) {
           url = `/api/report-templates?form_type=${encodeURIComponent(form.form_type)}`;
         }
       }
-      // Always load all templates (global + tenant-specific) — filtering is visual
       const data = await api<ReportTemplate[]>(url);
-      setTemplates(data);
+
+      // Filter: only show templates whose form_type matches one of the tenant's active forms
+      if (selectedTenant && tenantForms.length > 0) {
+        const tenantFormTypes = new Set(tenantForms.map(f => f.form_type));
+        const filtered = data.filter(t => !t.formType || tenantFormTypes.has(t.formType));
+        setTemplates(filtered);
+      } else {
+        setTemplates(data);
+      }
     } catch (error) {
       console.error('Error fetching report templates:', error);
     } finally {
@@ -110,7 +117,7 @@ export default function ReportTemplatesPage() {
 
   useEffect(() => {
     fetchTemplates();
-  }, [filterFormType, selectedTenant]);
+  }, [filterFormType, selectedTenant, tenantForms]);
 
   // Load activations when tenant changes
   const fetchActivations = async () => {
@@ -171,8 +178,9 @@ export default function ReportTemplatesPage() {
       }
 
       await fetchActivations();
-    } catch (error) {
-      console.error('Error activating template for tenant:', error);
+    } catch (error: any) {
+      const message = error?.data?.message || error?.message || 'Error al activar template';
+      setNotification({ message, type: 'error' });
     }
   };
 
@@ -269,6 +277,26 @@ export default function ReportTemplatesPage() {
         </div>
       )}
 
+      {/* Notification toast */}
+      {notification && (
+        <div className={`flex items-center justify-between rounded-md px-4 py-3 text-sm animate-in fade-in ${
+          notification.type === 'error'
+            ? 'bg-red-50 border border-red-200 text-red-800'
+            : 'bg-green-50 border border-green-200 text-green-800'
+        }`}>
+          <div className="flex items-center gap-2">
+            <span>{notification.type === 'error' ? '⚠️' : '✅'}</span>
+            <span>{notification.message}</span>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="text-gray-400 hover:text-gray-600 ml-4"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
@@ -280,6 +308,11 @@ export default function ReportTemplatesPage() {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Nombre
               </th>
+              {selectedTenant && (
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Formulario
+                </th>
+              )}
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Global
               </th>
@@ -296,19 +329,20 @@ export default function ReportTemplatesPage() {
           <tbody className="divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan={selectedTenant ? 5 : 4} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={selectedTenant ? 6 : 4} className="px-4 py-8 text-center text-gray-500">
                   Cargando...
                 </td>
               </tr>
             ) : templates.length === 0 ? (
               <tr>
-                <td colSpan={selectedTenant ? 5 : 4} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={selectedTenant ? 6 : 4} className="px-4 py-8 text-center text-gray-500">
                   No hay templates de reporte registrados.
                 </td>
               </tr>
             ) : (
               templates.map((t) => {
                 const activated = isActivatedForTenant(t.id);
+                const matchingForm = tenantForms.find((f) => f.form_type === t.formType);
 
                 return (
                   <tr key={t.id} className="hover:bg-gray-50">
@@ -323,6 +357,15 @@ export default function ReportTemplatesPage() {
                         <div className="text-xs text-gray-500">{t.description}</div>
                       )}
                     </td>
+                    {selectedTenant && (
+                      <td className="px-4 py-3">
+                        {matchingForm ? (
+                          <span className="text-sm text-gray-800">{matchingForm.name}</span>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Sin formulario</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <button
                         onClick={() => handleToggle(t.id)}

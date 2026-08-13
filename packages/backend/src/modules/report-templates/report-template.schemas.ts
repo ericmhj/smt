@@ -13,6 +13,7 @@ import { z } from 'zod';
 // ─── Section Type Enum ───────────────────────────────────────────────────────
 
 const sectionTypeValues = [
+  'cover_page',
   'static',
   'form_content',
   'signatures',
@@ -79,6 +80,7 @@ export const templateSectionSchema = z
         break;
       case 'observations':
       case 'state_history':
+      case 'cover_page':
         result = emptyConfigSchema.safeParse(section.config);
         break;
     }

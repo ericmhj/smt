@@ -145,6 +145,15 @@ export class FormTemplateService {
   }
 
   /**
+   * Delete a form template by ID.
+   */
+  async delete(id: string) {
+    await this.db
+      .delete(formTemplates)
+      .where(eq(formTemplates.id, id));
+  }
+
+  /**
    * Extract fields_metadata from HTML content.
    *
    * Parses the HTML to find:

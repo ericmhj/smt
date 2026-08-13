@@ -14,6 +14,7 @@ interface FormTemplate {
   isActive: boolean;
   fieldsMetadata: { sections: Array<{ sectionName: string; fields: string[] }> };
   createdAt: string;
+  updatedAt: string;
 }
 
 export default function FormTemplatesPage() {
@@ -61,6 +62,20 @@ export default function FormTemplatesPage() {
     }
   };
 
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`¿Eliminar el template "${name}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api(`/api/form-templates/${id}`, { method: 'DELETE' });
+      await fetchTemplates();
+    } catch (err: any) {
+      if (err?.data?.code === 'HAS_RELATIONS') {
+        alert(err.data.message);
+      } else {
+        alert(err instanceof Error ? err.message : 'Error al eliminar');
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -85,6 +100,7 @@ export default function FormTemplatesPage() {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Versión</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Secciones</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Última modificación</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
             </tr>
@@ -92,11 +108,11 @@ export default function FormTemplatesPage() {
           <tbody className="divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">Cargando...</td>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-500">Cargando...</td>
               </tr>
             ) : templates.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">No hay templates registrados.</td>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No hay templates registrados.</td>
               </tr>
             ) : (
               templates.map((t) => (
@@ -110,6 +126,9 @@ export default function FormTemplatesPage() {
                   <td className="px-4 py-3 text-sm text-gray-500">{t.description || '—'}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">v{t.currentVersion}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{t.fieldsMetadata?.sections?.length || 0}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500">
+                    {t.updatedAt ? new Date(t.updatedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => handleToggle(t.id)}
@@ -135,6 +154,12 @@ export default function FormTemplatesPage() {
                     >
                       Editar
                     </Link>
+                    <button
+                      onClick={() => handleDelete(t.id, t.name)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      Eliminar
+                    </button>
                   </td>
                 </tr>
               ))

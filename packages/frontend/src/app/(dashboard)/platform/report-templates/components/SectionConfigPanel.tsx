@@ -19,15 +19,61 @@ export function SectionConfigPanel({ section, onUpdate }: SectionConfigPanelProp
       {/* Title */}
       <div>
         <label className="block text-xs text-gray-600 mb-1">Título</label>
-        <input
-          type="text"
-          value={section.title}
-          onChange={(e) => onUpdate({ title: e.target.value })}
-          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={section.title}
+            onChange={(e) => onUpdate({ title: e.target.value })}
+            className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm"
+          />
+          <label className="flex items-center gap-1 text-[10px] text-gray-500 whitespace-nowrap" title="Imprimir título en el PDF">
+            <input
+              type="checkbox"
+              checked={(section.config.printTitle as boolean) ?? false}
+              onChange={(e) => updateConfig('printTitle', e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            PDF
+          </label>
+        </div>
       </div>
 
       {/* Type-specific config */}
+      {section.type === 'cover_page' && (
+        <div className="space-y-2">
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">Subtítulo</label>
+            <input
+              type="text"
+              value={(section.config.content as string) || ''}
+              onChange={(e) => updateConfig('content', e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              placeholder="Informe de Evaluación"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                checked={(section.config.showDate as boolean) ?? true}
+                onChange={(e) => updateConfig('showDate', e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Mostrar fecha
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                checked={(section.config.showTecnico as boolean) ?? true}
+                onChange={(e) => updateConfig('showTecnico', e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Mostrar técnico
+            </label>
+          </div>
+        </div>
+      )}
+
       {section.type === 'static' && (
         <div>
           <label className="block text-xs text-gray-600 mb-1">Contenido</label>

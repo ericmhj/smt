@@ -18,12 +18,14 @@ interface TenantForm {
   template_id: string | null;
   form_type: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 interface FormTemplate {
   id: string;
   formType: string;
   name: string;
+  isActive?: boolean;
 }
 
 interface ReportTemplate {
@@ -63,12 +65,28 @@ export default function TenantFormsPage() {
   const [modalError, setModalError] = useState('');
   const [structuralError, setStructuralError] = useState<StructuralError | null>(null);
 
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState<TenantForm | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editHtml, setEditHtml] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+
+  // Preview modal state
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewForm, setPreviewForm] = useState<TenantForm | null>(null);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   // Load tenants and templates
   useEffect(() => {
     api<{ data: Tenant[] }>('/api/platform/tenants?limit=100')
       .then((res) => setTenants(res.data || []))
       .catch(() => {});
-    api<FormTemplate[]>('/api/form-templates/all')
+    api<FormTemplate[]>('/api/form-templates')
       .then(setTemplates)
       .catch(() => {});
     api<ReportTemplate[]>('/api/report-templates')
@@ -131,6 +149,109 @@ export default function TenantFormsPage() {
     setModalHtml('');
     setModalError('');
     setStructuralError(null);
+  };
+
+  const openEditModal = async (form: TenantForm) => {
+    setEditForm(form);
+    setEditName(form.name);
+    setEditHtml('');
+    setEditError('');
+    setEditSuccess('');
+    setEditLoading(true);
+    setShowEditModal(true);
+
+    // Load HTML from parent template
+    if (form.template_id) {
+      try {
+        const template = await api<{ htmlContent: string }>(`/api/form-templates/${form.template_id}`);
+        if (template?.htmlContent) {
+          setEditHtml(template.htmlContent);
+        }
+      } catch {
+        setEditError('No se pudo cargar el HTML del template padre');
+      }
+    } else {
+      setEditError('Este formulario no tiene un template padre asociado');
+    }
+    setEditLoading(false);
+  };
+
+  const openPreviewModal = async (form: TenantForm) => {
+    setPreviewForm(form);
+    setPreviewHtml('');
+    setPreviewLoading(true);
+    setShowPreviewModal(true);
+
+    if (form.template_id) {
+      try {
+        const template = await api<{ htmlContent: string }>(`/api/form-templates/${form.template_id}`);
+        setPreviewHtml(template?.htmlContent || '<p>Sin contenido HTML</p>');
+      } catch {
+        setPreviewHtml('<p class="text-red-500">Error al cargar la vista previa</p>');
+      }
+    } else {
+      setPreviewHtml('<p class="text-gray-500">Este formulario no tiene template asociado</p>');
+    }
+    setPreviewLoading(false);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editForm) return;
+    setEditError('');
+    setEditSuccess('');
+    setEditSubmitting(true);
+
+    try {
+      // Update tenant form directly via PUT /api/forms/:id with tenant context
+      await api(`/api/forms/${editForm.id}`, {
+        method: 'PUT',
+        headers: { 'X-Tenant-Slug': selectedTenant },
+        body: JSON.stringify({
+          html: editHtml,
+          newName: editName !== editForm.name ? editName : undefined,
+        }),
+      });
+      setEditSuccess('Formulario del tenant actualizado correctamente.');
+      // Refresh forms list
+      const data = await api<TenantForm[]>(`/api/platform/tenants/${selectedTenant}/forms`);
+      setForms(data);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Error al actualizar');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const handleDeleteForm = async (form: TenantForm) => {
+    if (!confirm(`¿Eliminar el formulario "${form.name}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api('/api/platform/delete-tenant-form', {
+        method: 'POST',
+        body: JSON.stringify({ tenantSlug: selectedTenant, formId: form.id }),
+      });
+      const data = await api<TenantForm[]>(`/api/platform/tenants/${selectedTenant}/forms`);
+      setForms(data);
+    } catch (err) {
+      if (err instanceof ApiError && err.data?.code === 'HAS_RELATIONS') {
+        alert(err.data.message as string);
+      } else {
+        alert(err instanceof Error ? err.message : 'Error al eliminar');
+      }
+    }
+  };
+
+  const handleToggleForm = async (form: TenantForm) => {
+    try {
+      await api('/api/platform/toggle-tenant-form', {
+        method: 'POST',
+        body: JSON.stringify({ tenantSlug: selectedTenant, formId: form.id, isActive: !form.is_active }),
+      });
+      const data = await api<TenantForm[]>(`/api/platform/tenants/${selectedTenant}/forms`);
+      setForms(data);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al cambiar estado');
+    }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -210,14 +331,16 @@ export default function TenantFormsPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Template</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reporte Asignado</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Versión</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Última modificación</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {loadingForms ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">Cargando...</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Cargando...</td></tr>
               ) : forms.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">Sin formularios en este tenant.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Sin formularios en este tenant.</td></tr>
               ) : (
                 forms.map((f) => {
                   const reportName = getReportTemplateName(f);
@@ -243,12 +366,46 @@ export default function TenantFormsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">v{f.current_version}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {(() => {
+                          const dateStr = f.updated_at || f.created_at;
+                          if (!dateStr) return '—';
+                          const d = new Date(dateStr);
+                          if (isNaN(d.getTime())) return '—';
+                          return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                        })()}
+                      </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                          f.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
+                        <button
+                          onClick={() => handleToggleForm(f)}
+                          className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
+                            f.is_active
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                              : 'bg-red-100 text-red-800 hover:bg-red-200'
+                          }`}
+                        >
                           {f.is_active ? 'Activo' : 'Inactivo'}
-                        </span>
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-sm space-x-3">
+                        <button
+                          onClick={() => openPreviewModal(f)}
+                          className="text-gray-600 hover:text-gray-800"
+                        >
+                          Vista previa
+                        </button>
+                        <button
+                          onClick={() => openEditModal(f)}
+                          className="text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleDeleteForm(f)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Eliminar
+                        </button>
                       </td>
                     </tr>
                   );
@@ -329,7 +486,7 @@ export default function TenantFormsPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Seleccionar template...</option>
-                  {templates.map((t) => (
+                  {templates.filter(t => t.isActive !== false).map((t) => (
                     <option key={t.id} value={t.id}>{t.formType} — {t.name}</option>
                   ))}
                 </select>
@@ -377,6 +534,122 @@ export default function TenantFormsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Edit Modal */}
+      {showEditModal && editForm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">Editar Formulario</h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Tenant: <span className="font-medium">{selectedTenant}</span> · 
+                  Tipo: <span className="font-mono text-purple-600">{editForm.form_type || 'N/A'}</span> · 
+                  Versión actual: v{editForm.current_version}
+                </p>
+              </div>
+              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl font-bold">×</button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              {editError && (
+                <div className="bg-red-50 text-red-700 text-sm p-3 rounded-md">{editError}</div>
+              )}
+              {editSuccess && (
+                <div className="bg-green-50 text-green-700 text-sm p-3 rounded-md">{editSuccess}</div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del formulario</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">HTML del formulario</label>
+                {editLoading ? (
+                  <div className="text-gray-500 text-sm py-4 text-center">Cargando contenido...</div>
+                ) : (
+                  <textarea
+                    value={editHtml}
+                    onChange={(e) => setEditHtml(e.target.value)}
+                    required
+                    rows={15}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                  />
+                )}
+                <p className="text-xs text-gray-500 mt-1">Se validará la estructura contra el template padre al guardar.</p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={editSubmitting || editLoading || !editHtml}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+                >
+                  {editSubmitting ? 'Actualizando...' : 'Guardar Cambios'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Preview Modal */}
+      {showPreviewModal && previewForm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">{previewForm.name}</h2>
+                <p className="text-xs text-gray-500">
+                  Tenant: {selectedTenant} · Tipo: {previewForm.form_type || 'N/A'} · v{previewForm.current_version} · Solo lectura
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowPreviewModal(false); setPreviewHtml(''); }}
+                className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {previewLoading ? (
+                <div className="text-center text-gray-500 py-12">Cargando vista previa...</div>
+              ) : (
+                <div
+                  className="prose prose-sm max-w-none pointer-events-none select-none opacity-90
+                    [&_input]:border [&_input]:border-gray-300 [&_input]:rounded [&_input]:px-2 [&_input]:py-1 [&_input]:w-full [&_input]:mb-3 [&_input]:bg-gray-50
+                    [&_select]:border [&_select]:border-gray-300 [&_select]:rounded [&_select]:px-2 [&_select]:py-1 [&_select]:w-full [&_select]:mb-3 [&_select]:bg-gray-50
+                    [&_textarea]:border [&_textarea]:border-gray-300 [&_textarea]:rounded [&_textarea]:px-2 [&_textarea]:py-1 [&_textarea]:w-full [&_textarea]:mb-3 [&_textarea]:bg-gray-50
+                    [&_label]:font-medium [&_label]:text-gray-700 [&_label]:block [&_label]:mb-1
+                    [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1
+                    [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50"
+                  dangerouslySetInnerHTML={{ __html: previewHtml }}
+                />
+              )}
+            </div>
+            <div className="flex items-center justify-end px-6 py-3 border-t">
+              <button
+                onClick={() => { setShowPreviewModal(false); setPreviewHtml(''); }}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,12 +1,13 @@
 'use client';
 
-type SectionType = 'static' | 'form_content' | 'signatures' | 'custom_html' | 'observations' | 'state_history';
+type SectionType = 'cover_page' | 'static' | 'form_content' | 'signatures' | 'custom_html' | 'observations' | 'state_history';
 
 interface SectionPaletteProps {
   onAdd: (type: SectionType) => void;
 }
 
 const SECTION_TYPES: Array<{ type: SectionType; label: string; icon: string; description: string }> = [
+  { type: 'cover_page', label: 'Carátula', icon: '📰', description: 'Portada a página completa' },
   { type: 'static', label: 'Estático', icon: '📄', description: 'Texto fijo (portada, headers)' },
   { type: 'form_content', label: 'Contenido', icon: '📋', description: 'Campos del formulario' },
   { type: 'signatures', label: 'Firmas', icon: '✍️', description: 'Bloques de firma' },

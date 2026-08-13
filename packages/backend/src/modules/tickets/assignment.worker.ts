@@ -52,6 +52,21 @@ export function startAssignmentWorker(): Worker<AssignmentJobData> {
           .set({ tecnicoAsignadoId: tecnicoId, updatedAt: new Date() })
           .where(eq(tickets.id, ticketId));
 
+        // Also update the reactivo's tecnicoId so it appears on the technician's Kanban
+        const ticketResult = await db
+          .select({ reactivoId: tickets.reactivoId })
+          .from(tickets)
+          .where(eq(tickets.id, ticketId))
+          .limit(1);
+
+        if (ticketResult[0]?.reactivoId) {
+          const { reactivos } = await import('../../db/schema/reactivos.js');
+          await db
+            .update(reactivos)
+            .set({ tecnicoId, updatedAt: new Date() })
+            .where(eq(reactivos.id, ticketResult[0].reactivoId));
+        }
+
         job.log(`Ticket ${ticketId} assigned to tecnico ${tecnicoId}`);
       } else {
         job.log(`No matching rule found for ticket ${ticketId}`);

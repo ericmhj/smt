@@ -125,7 +125,7 @@ const listTenantsQuerySchema = z.object({
  * Guard that verifies the user has the platform_admin role.
  */
 function requirePlatformAdmin(request: FastifyRequest, reply: FastifyReply, done: () => void) {
-  if (!request.user || request.user.role !== 'platform_admin') {
+  if (!request.user || (request.user.role !== 'platform_admin' && request.user.role !== 'superusuario')) {
     reply.status(403).send({
       statusCode: 403,
       code: 'PLATFORM_ACCESS_DENIED',
@@ -146,6 +146,191 @@ export async function platformRoutes(
 
   // All platform routes require platform_admin role
   fastify.addHook('preHandler', requirePlatformAdmin);
+
+  // POST /api/platform/get-tenant-form — Get a specific tenant form with HTML (uses POST to avoid route conflicts)
+  fastify.post('/api/platform/get-tenant-form', async (request, reply) => {
+    const body = request.body as { tenantSlug?: string; formId?: string };
+    if (!body.tenantSlug || !body.formId) {
+      return reply.status(400).send({ statusCode: 400, message: 'tenantSlug y formId son requeridos' });
+    }
+    const sqlClient = getSqlClient();
+    const sanitizedSlug = body.tenantSlug.replace(/-/g, '_');
+    const schemaName = `sgr_${sanitizedSlug}`;
+
+    try {
+      const formResult = await sqlClient.unsafe(
+        `SELECT id, name, slug, is_active, current_version, template_id, form_type, created_at, updated_at
+         FROM ${schemaName}.forms WHERE id = $1 LIMIT 1`,
+        [body.formId],
+      );
+      const form = formResult[0];
+      if (!form) {
+        return reply.status(404).send({ statusCode: 404, message: 'Formulario no encontrado' });
+      }
+
+      const versionResult = await sqlClient.unsafe(
+        `SELECT html_content, sanitized_html, fields_metadata, version_number
+         FROM ${schemaName}.form_versions
+         WHERE form_id = $1 ORDER BY version_number DESC LIMIT 1`,
+        [body.formId],
+      );
+      let version = versionResult[0];
+
+      // Fallback: if no version in tenant, load HTML from parent template
+      if (!version && form.template_id) {
+        const templateResult = await sqlClient.unsafe(
+          `SELECT html_content FROM public.form_templates WHERE id = $1 LIMIT 1`,
+          [form.template_id],
+        );
+        const tmpl = templateResult[0];
+        if (tmpl) {
+          version = {
+            html_content: tmpl.html_content,
+            sanitized_html: tmpl.html_content,
+            fields_metadata: null,
+            version_number: 0,
+          };
+        }
+      }
+
+      return reply.status(200).send({
+        id: form.id,
+        name: form.name,
+        slug: form.slug,
+        isActive: form.is_active,
+        currentVersion: form.current_version,
+        templateId: form.template_id,
+        formType: form.form_type,
+        createdAt: form.created_at,
+        updatedAt: form.updated_at,
+        currentVersionData: version ? {
+          htmlContent: version.html_content,
+          sanitizedHtml: version.sanitized_html,
+          fieldsMetadata: version.fields_metadata,
+          versionNumber: version.version_number,
+        } : null,
+      });
+    } catch {
+      return reply.status(404).send({ statusCode: 404, message: `Schema ${schemaName} no encontrado` });
+    }
+  });
+
+  // POST /api/platform/delete-tenant-form — Delete a tenant form
+  fastify.post('/api/platform/delete-tenant-form', async (request, reply) => {
+    const body = request.body as { tenantSlug?: string; formId?: string };
+    if (!body.tenantSlug || !body.formId) {
+      return reply.status(400).send({ statusCode: 400, message: 'tenantSlug y formId son requeridos' });
+    }
+    const sqlClient = getSqlClient();
+    const sanitizedSlug = body.tenantSlug.replace(/-/g, '_');
+    const schemaName = `sgr_${sanitizedSlug}`;
+    try {
+      const reactivosResult = await sqlClient.unsafe(`SELECT count(*) as cnt FROM ${schemaName}.reactivos WHERE form_id = $1`, [body.formId]);
+      const reactivoCount = parseInt(reactivosResult[0]?.cnt || '0');
+      const ticketsResult = await sqlClient.unsafe(`SELECT count(*) as cnt FROM ${schemaName}.tickets WHERE form_id = $1`, [body.formId]);
+      const ticketCount = parseInt(ticketsResult[0]?.cnt || '0');
+      const assignmentsResult = await sqlClient.unsafe(`SELECT count(*) as cnt FROM ${schemaName}.form_assignments WHERE form_id = $1`, [body.formId]);
+      const assignmentCount = parseInt(assignmentsResult[0]?.cnt || '0');
+      if (reactivoCount > 0 || ticketCount > 0 || assignmentCount > 0) {
+        const relations = [];
+        if (reactivoCount > 0) relations.push(`${reactivoCount} reactivo(s)`);
+        if (ticketCount > 0) relations.push(`${ticketCount} ticket(s)`);
+        if (assignmentCount > 0) relations.push(`${assignmentCount} asignación(es)`);
+        return reply.status(409).send({ statusCode: 409, code: 'HAS_RELATIONS', message: `No se puede eliminar: tiene relaciones con ${relations.join(', ')}.` });
+      }
+      await sqlClient.unsafe(`DELETE FROM ${schemaName}.forms WHERE id = $1`, [body.formId]);
+      return reply.status(200).send({ message: 'Formulario eliminado' });
+    } catch (error: any) {
+      return reply.status(500).send({ statusCode: 500, message: 'Error: ' + (error?.message || 'desconocido') });
+    }
+  });
+
+  // POST /api/platform/toggle-tenant-form — Toggle is_active status
+  fastify.post('/api/platform/toggle-tenant-form', async (request, reply) => {
+    const body = request.body as { tenantSlug?: string; formId?: string; isActive?: boolean };
+    if (!body.tenantSlug || !body.formId || body.isActive === undefined) {
+      return reply.status(400).send({ statusCode: 400, message: 'tenantSlug, formId y isActive son requeridos' });
+    }
+    const sqlClient = getSqlClient();
+    const sanitizedSlug = body.tenantSlug.replace(/-/g, '_');
+    const schemaName = `sgr_${sanitizedSlug}`;
+    try {
+      await sqlClient.unsafe(
+        `UPDATE ${schemaName}.forms SET is_active = $1, updated_at = NOW() WHERE id = $2`,
+        [body.isActive, body.formId],
+      );
+      return reply.status(200).send({ message: 'Estado actualizado', isActive: body.isActive });
+    } catch (error: any) {
+      return reply.status(500).send({ statusCode: 500, message: 'Error: ' + (error?.message || 'desconocido') });
+    }
+  });
+
+  // POST /api/platform/save-tenant-form — Update a tenant form's HTML content
+  fastify.post('/api/platform/save-tenant-form', async (request, reply) => {
+    const body = request.body as { tenantSlug?: string; formId?: string; html?: string; newName?: string };
+    if (!body.tenantSlug || !body.formId || !body.html) {
+      return reply.status(400).send({ statusCode: 400, message: 'tenantSlug, formId y html son requeridos' });
+    }
+    const sqlClient = getSqlClient();
+    const sanitizedSlug = body.tenantSlug.replace(/-/g, '_');
+    const schemaName = `sgr_${sanitizedSlug}`;
+
+    try {
+      const formResult = await sqlClient.unsafe(
+        `SELECT id, name, current_version, template_id FROM ${schemaName}.forms WHERE id = $1 LIMIT 1`,
+        [body.formId],
+      );
+      const form = formResult[0];
+      if (!form) {
+        return reply.status(404).send({ statusCode: 404, message: 'Formulario no encontrado' });
+      }
+
+      // Structural validation if template exists
+      if (form.template_id) {
+        const templateResult = await sqlClient.unsafe(
+          `SELECT fields_metadata FROM public.form_templates WHERE id = $1`,
+          [form.template_id],
+        );
+        const template = templateResult[0];
+        if (template?.fields_metadata) {
+          const { validateStructure } = await import('../validation/structural-validator.js');
+          const fieldsMetadata = template.fields_metadata as { sections: Array<{ sectionName: string; fields: string[] }> };
+          const structuralResult = validateStructure(body.html, fieldsMetadata);
+          if (!structuralResult.valid) {
+            return reply.status(400).send({
+              statusCode: 400,
+              error: 'STRUCTURAL_VALIDATION_FAILED',
+              message: 'El formulario no cumple con la estructura del template padre',
+              missingFields: structuralResult.missingFields,
+              missingSections: structuralResult.missingSections,
+            });
+          }
+        }
+      }
+
+      const newVersion = form.current_version + 1;
+      const creatorId = request.user?.sub || null;
+
+      await sqlClient.unsafe(
+        `INSERT INTO ${schemaName}.form_versions (form_id, version_number, html_content, sanitized_html, json_schema, fields_metadata, change_type, created_by)
+         VALUES ($1, $2, $3, $3, '{"type":"object","properties":{},"required":[]}', '{"sections":[]}', 'update', $4)`,
+        [body.formId, newVersion, body.html, creatorId],
+      );
+
+      const updateParts = [`current_version = ${newVersion}`, `updated_at = NOW()`];
+      if (body.newName) {
+        updateParts.push(`name = '${body.newName.replace(/'/g, "''")}'`);
+      }
+      await sqlClient.unsafe(
+        `UPDATE ${schemaName}.forms SET ${updateParts.join(', ')} WHERE id = $1`,
+        [body.formId],
+      );
+
+      return reply.status(200).send({ message: 'Formulario actualizado', newVersion });
+    } catch {
+      return reply.status(500).send({ statusCode: 500, message: 'Error al actualizar formulario' });
+    }
+  });
 
   // POST /api/platform/tenants — Create a new tenant
   fastify.post('/api/platform/tenants', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -412,16 +597,88 @@ export async function platformRoutes(
 
   // ─── Tenant Forms Management ─────────────────────────────────────────────
 
-  // GET /api/platform/tenants/:slug/forms — List forms for a specific tenant
+  // GET /api/platform/tenants/:slug/forms — List forms for a specific tenant (or get one by ?id=)
   fastify.get('/api/platform/tenants/:slug/forms', async (request, reply) => {
     const { slug } = request.params as { slug: string };
+    const { id: formId } = request.query as { id?: string };
     const sqlClient = getSqlClient();
     const sanitizedSlug = slug.replace(/-/g, '_');
     const schemaName = `sgr_${sanitizedSlug}`;
 
     try {
+      // If ?id= is provided, return a single form with HTML content
+      if (formId) {
+        const formResult = await sqlClient.unsafe(
+          `SELECT id, name, slug, is_active, current_version, template_id, form_type, created_at, updated_at
+           FROM ${schemaName}.forms WHERE id = $1 LIMIT 1`,
+          [formId],
+        );
+        const form = formResult[0];
+        if (!form) {
+          return reply.status(404).send({
+            statusCode: 404,
+            code: 'FORM_NOT_FOUND',
+            message: `Formulario no encontrado en ${schemaName}.forms con id=${formId}`,
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+
+        const versionResult = await sqlClient.unsafe(
+          `SELECT html_content, sanitized_html, fields_metadata, version_number
+           FROM ${schemaName}.form_versions
+           WHERE form_id = $1 AND version_number = $2 LIMIT 1`,
+          [formId, form.current_version],
+        );
+        const version = versionResult[0];
+
+        // Fallback: try to get latest version if exact version not found
+        let finalVersion = version;
+        if (!finalVersion) {
+          const latestResult = await sqlClient.unsafe(
+            `SELECT html_content, sanitized_html, fields_metadata, version_number
+             FROM ${schemaName}.form_versions
+             WHERE form_id = $1 ORDER BY version_number DESC LIMIT 1`,
+            [formId],
+          );
+          finalVersion = latestResult[0];
+        }
+
+        // Count total versions for debug
+        const countResult = await sqlClient.unsafe(
+          `SELECT count(*) as cnt FROM ${schemaName}.form_versions WHERE form_id = $1`,
+          [formId],
+        );
+
+        return reply.status(200).send({
+          id: form.id,
+          name: form.name,
+          slug: form.slug,
+          isActive: form.is_active,
+          currentVersion: form.current_version,
+          templateId: form.template_id,
+          formType: form.form_type,
+          createdAt: form.created_at,
+          updatedAt: form.updated_at,
+          _debug: {
+            schema: schemaName,
+            formId,
+            currentVersion: form.current_version,
+            versionsCount: countResult[0]?.cnt,
+            hasVersion: !!finalVersion,
+          },
+          currentVersionData: finalVersion ? {
+            htmlContent: finalVersion.html_content,
+            sanitizedHtml: finalVersion.sanitized_html,
+            fieldsMetadata: finalVersion.fields_metadata,
+            versionNumber: finalVersion.version_number,
+          } : null,
+        });
+      }
+
+      // Otherwise list all forms
       const forms = await sqlClient.unsafe(
-        `SELECT id, name, slug, is_active, current_version, template_id, form_type, created_at FROM ${schemaName}.forms ORDER BY created_at DESC`,
+        `SELECT id, name, slug, is_active, current_version, template_id, form_type, created_at, updated_at FROM ${schemaName}.forms ORDER BY created_at DESC`,
       );
       return reply.status(200).send(forms);
     } catch {
@@ -531,6 +788,34 @@ export async function platformRoutes(
       return reply.status(201).send(form);
     } catch (error: any) {
       if (error?.code === '23505') {
+        // Form already exists — update its form_versions with new HTML
+        try {
+          const existingForm = await sqlClient.unsafe(
+            `SELECT id, current_version FROM ${schemaName}.forms WHERE template_id = $1 LIMIT 1`,
+            [body.templateId],
+          );
+          const existing = existingForm[0];
+          if (existing) {
+            const newVersion = existing.current_version + 1;
+            const jsonSchema = { type: 'object', properties: {}, required: [] };
+            await sqlClient.unsafe(
+              `INSERT INTO ${schemaName}.form_versions (form_id, version_number, html_content, sanitized_html, json_schema, fields_metadata, change_type, created_by)
+               VALUES ($1, $2, $3, $3, $4, $5, 'template_sync', $6)`,
+              [existing.id, newVersion, body.html, JSON.stringify(jsonSchema), JSON.stringify(fieldsMetadata), creatorId],
+            );
+            await sqlClient.unsafe(
+              `UPDATE ${schemaName}.forms SET current_version = $1, updated_at = NOW(), name = $2 WHERE id = $3`,
+              [newVersion, body.name, existing.id],
+            );
+            return reply.status(200).send({
+              id: existing.id,
+              message: 'Formulario sincronizado',
+              newVersion,
+            });
+          }
+        } catch {
+          // Fall through to error
+        }
         return reply.status(409).send({
           statusCode: 409,
           code: 'DUPLICATE_SLUG',
@@ -539,6 +824,106 @@ export async function platformRoutes(
           requestId: request.id,
         });
       }
+      throw error;
+    }
+  });
+
+  // (GET form detail is handled by /api/platform/tenants/:slug/forms?id=xxx above)
+
+  // POST /api/platform/tenants/:slug/forms/update — Update a tenant form's HTML content
+  fastify.post('/api/platform/tenants/:slug/forms/update', async (request, reply) => {
+    const { slug } = request.params as { slug: string };
+    const body = request.body as { formId?: string; html?: string; newName?: string };
+    const sqlClient = getSqlClient();
+    const sanitizedSlug = slug.replace(/-/g, '_');
+    const schemaName = `sgr_${sanitizedSlug}`;
+
+    if (!body.formId || !body.html) {
+      return reply.status(400).send({
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+        message: 'formId y html son requeridos',
+        timestamp: new Date().toISOString(),
+        requestId: request.id,
+      });
+    }
+
+    const formId = body.formId;
+
+    try {
+      // Get existing form
+      const formResult = await sqlClient.unsafe(
+        `SELECT id, name, current_version, template_id, form_type FROM ${schemaName}.forms WHERE id = $1 LIMIT 1`,
+        [formId],
+      );
+      const form = formResult[0];
+      if (!form) {
+        return reply.status(404).send({
+          statusCode: 404,
+          code: 'FORM_NOT_FOUND',
+          message: 'Formulario no encontrado',
+          timestamp: new Date().toISOString(),
+          requestId: request.id,
+        });
+      }
+
+      // If form has a template, validate structure
+      if (form.template_id) {
+        const templateResult = await sqlClient.unsafe(
+          `SELECT fields_metadata FROM public.form_templates WHERE id = $1`,
+          [form.template_id],
+        );
+        const template = templateResult[0];
+        if (template) {
+          const { validateStructure } = await import('../validation/structural-validator.js');
+          const fieldsMetadata = template.fields_metadata as { sections: Array<{ sectionName: string; fields: string[] }> };
+          const structuralResult = validateStructure(body.html, fieldsMetadata);
+          if (!structuralResult.valid) {
+            return reply.status(400).send({
+              statusCode: 400,
+              error: 'STRUCTURAL_VALIDATION_FAILED',
+              message: 'El formulario no cumple con la estructura del template padre',
+              missingFields: structuralResult.missingFields,
+              missingSections: structuralResult.missingSections,
+            });
+          }
+        }
+      }
+
+      // Create new version
+      const newVersion = form.current_version + 1;
+      const creatorId = request.user?.sub || null;
+
+      await sqlClient.unsafe(
+        `INSERT INTO ${schemaName}.form_versions (form_id, version_number, html_content, sanitized_html, json_schema, fields_metadata, change_type, created_by)
+         VALUES ($1, $2, $3, $3, '{"type":"object","properties":{},"required":[]}', '{"sections":[]}', 'update', $4)`,
+        [formId, newVersion, body.html, creatorId],
+      );
+
+      // Update form record
+      const updateFields: string[] = [`current_version = ${newVersion}`, `updated_at = NOW()`];
+      if (body.newName) {
+        updateFields.push(`name = '${body.newName.replace(/'/g, "''")}'`);
+      }
+
+      await sqlClient.unsafe(
+        `UPDATE ${schemaName}.forms SET ${updateFields.join(', ')} WHERE id = $1`,
+        [formId],
+      );
+
+      // Return updated form
+      const updatedResult = await sqlClient.unsafe(
+        `SELECT id, name, slug, is_active, current_version, template_id, form_type, created_at, updated_at
+         FROM ${schemaName}.forms WHERE id = $1`,
+        [formId],
+      );
+
+      return reply.status(200).send({
+        message: 'Formulario actualizado',
+        form: updatedResult[0],
+        newVersion,
+      });
+    } catch (error) {
       throw error;
     }
   });
@@ -590,6 +975,32 @@ export async function platformRoutes(
     const schemaName = `sgr_${sanitizedSlug}`;
 
     try {
+      // Validate: only one active template per form_type (per tenant form)
+      const templateInfo = await sqlClient.unsafe(
+        `SELECT form_type FROM public.report_templates WHERE id = $1`, [body.report_template_id],
+      );
+      const formType = templateInfo[0]?.form_type;
+
+      if (formType) {
+        // Check if there's already an activation for any template with the same form_type
+        const existingActivation = await sqlClient.unsafe(
+          `SELECT a.id, rt.name FROM ${schemaName}.report_template_activations a
+           JOIN public.report_templates rt ON rt.id = a.report_template_id
+           WHERE rt.form_type = $1`,
+          [formType],
+        );
+
+        if (existingActivation && existingActivation.length > 0) {
+          return reply.status(409).send({
+            statusCode: 409,
+            code: 'ACTIVATION_ALREADY_EXISTS',
+            message: `Ya existe un template de reporte activo ("${existingActivation[0].name}") para el formulario tipo "${formType}" en este tenant. Desactívalo primero.`,
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+      }
+
       // Get an admin user from the tenant to set as activated_by
       const adminResult = await sqlClient.unsafe(
         `SELECT id FROM ${schemaName}.users WHERE role IN ('admin', 'superusuario', 'platform_admin') LIMIT 1`,

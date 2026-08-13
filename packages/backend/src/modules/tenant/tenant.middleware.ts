@@ -25,7 +25,7 @@ const TENANT_CACHE_TTL = 60; // seconds
  * Checks if the given URL is a platform route that skips tenant resolution.
  */
 function isPlatformRoute(url: string): boolean {
-  return url.startsWith('/api/platform/') || url.startsWith('/api/platform') || url.startsWith('/api/form-templates') || url.startsWith('/api/validation-rules') || url.startsWith('/api/calculation-rules') || url.startsWith('/api/report-templates') || url.startsWith('/api/report-themes');
+  return url.startsWith('/api/platform/') || url.startsWith('/api/platform') || url.startsWith('/api/form-templates') || url.startsWith('/api/validation-rules') || url.startsWith('/api/calculation-rules') || url.startsWith('/api/report-templates') || url.startsWith('/api/report-themes') || url.startsWith('/api/platform/tenant-forms') || url.startsWith('/api/platform/tenant-form-detail');
 }
 
 /**
@@ -136,8 +136,16 @@ async function tenantMiddlewarePlugin(fastify: FastifyInstance): Promise<void> {
     // Determine tenant slug
     let tenantSlug: string | null = null;
 
+    // Platform admin can override tenant context via X-Tenant-Slug header
+    if (request.user && request.user.role === 'platform_admin') {
+      const headerSlug = request.headers['x-tenant-slug'] as string | undefined;
+      if (headerSlug && headerSlug !== 'default') {
+        tenantSlug = headerSlug;
+      }
+    }
+
     // First try: extract from JWT payload (already decoded by auth middleware)
-    if (request.user && request.user.tenantSlug) {
+    if (!tenantSlug && request.user && request.user.tenantSlug) {
       tenantSlug = request.user.tenantSlug;
     }
 

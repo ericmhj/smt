@@ -15,7 +15,7 @@ export async function formRoutes(
 ): Promise<void> {
   const formService = new FormService(opts.db);
 
-  const adminRoles = requireRole(['superusuario', 'admin']);
+  const adminRoles = requireRole(['superusuario', 'admin', 'platform_admin']);
   const readRoles = requireRole(['superusuario', 'admin', 'manager', 'tecnico', 'asistente']);
 
   // POST /api/forms — create form from HTML
@@ -468,6 +468,74 @@ export async function formRoutes(
             timestamp: new Date().toISOString(),
             requestId: request.id,
           });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // GET /api/forms/:id/render — Serve form HTML as standalone page with submit logic
+  fastify.get(
+    '/api/forms/:id/render',
+    { preHandler: [readRoles] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const token = request.headers.authorization?.replace('Bearer ', '') || '';
+      const tenantSlug = request.user?.tenantSlug || 'default';
+      const port = (request.server.addresses()?.[0] as { port?: number })?.port || 3001;
+      const apiBase = `${request.protocol}://${request.hostname}:${port}`;
+
+      try {
+        const form = await formService.findById(id);
+        const htmlContent = form.currentVersionData?.htmlContent || '';
+
+        const submitScript = `
+<script>
+(function() {
+  var bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:2px solid #1a6b3a;padding:16px 24px;display:flex;gap:12px;justify-content:center;z-index:9999;box-shadow:0 -4px 12px rgba(0,0,0,0.1)';
+  bar.innerHTML = '<button id="btn-submit" style="background:#1a6b3a;color:white;border:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Enviar Formulario</button><button id="btn-cancel" style="background:#6b7280;color:white;border:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Cancelar</button>';
+  document.body.appendChild(bar);
+  document.body.style.paddingBottom = '80px';
+
+  document.getElementById('btn-cancel').onclick = function() { window.close(); };
+  document.getElementById('btn-submit').onclick = function() {
+    var btn = this;
+    btn.textContent = 'Enviando...'; btn.disabled = true;
+    var inputs = document.querySelectorAll('input,select,textarea');
+    var r = {};
+    inputs.forEach(function(el) {
+      var n = el.getAttribute('name'); if(!n) return;
+      if(el.type==='checkbox') r[n]=el.checked;
+      else if(el.type==='radio'){if(el.checked)r[n]=el.value;}
+      else if(el.type==='number') r[n]=el.value===''?null:Number(el.value);
+      else r[n]=el.value;
+    });
+    fetch('${apiBase}/api/reactivos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer ${token}','X-Tenant-Slug':'${tenantSlug}'},body:JSON.stringify({formId:'${id}',responses:r})})
+    .then(function(res){if(!res.ok)return res.json().then(function(d){throw new Error(d.message||'Error')});return res.json();})
+    .then(function(){
+      document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;font-family:system-ui"><div style="width:64px;height:64px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;font-size:32px">\\u2713</div><h2 style="color:#166534;margin:0">Formulario enviado</h2><p style="color:#6b7280">Esta ventana se cerrara...</p></div>';
+      setTimeout(function(){window.close();},2000);
+    })
+    .catch(function(err){alert('Error: '+err.message);btn.textContent='Enviar Formulario';btn.disabled=false;});
+  };
+})();
+<\/script>`;
+
+        let fullHtml = htmlContent;
+        if (fullHtml.includes('</body>')) {
+          fullHtml = fullHtml.replace('</body>', submitScript + '\n</body>');
+        } else {
+          fullHtml = fullHtml + submitScript;
+        }
+
+        reply.header('Content-Type', 'text/html; charset=utf-8');
+        reply.header('Cache-Control', 'no-store');
+        return reply.send(fullHtml);
+      } catch (error) {
+        if (error instanceof FormError) {
+          reply.header('Content-Type', 'text/html');
+          return reply.status(error.statusCode).send(`<h1>Error</h1><p>${error.message}</p>`);
         }
         throw error;
       }

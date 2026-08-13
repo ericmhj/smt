@@ -180,6 +180,42 @@ export async function formTemplateRoutes(
       },
     });
 
+    // Propagate HTML update to all tenant forms that use this template
+    if (bodyResult.data.html_content) {
+      try {
+        const sqlClient = (await import('../../db/index.js')).getSqlClient();
+        // Find all tenant schemas
+        const schemas = await sqlClient.unsafe(
+          `SELECT nspname FROM pg_namespace WHERE nspname LIKE 'sgr_%'`,
+        );
+        for (const schema of schemas) {
+          const schemaName = schema.nspname;
+          // Find forms in this tenant that reference this template
+          const tenantForms = await sqlClient.unsafe(
+            `SELECT id, current_version FROM ${schemaName}.forms WHERE template_id = $1`,
+            [paramResult.data.id],
+          );
+          for (const tf of tenantForms) {
+            const newVersion = tf.current_version + 1;
+            // Insert new version with updated HTML
+            await sqlClient.unsafe(
+              `INSERT INTO ${schemaName}.form_versions (form_id, version_number, html_content, sanitized_html, json_schema, fields_metadata, change_type, created_by)
+               VALUES ($1, $2, $3, $3, '{"type":"object","properties":{},"required":[]}', '{"sections":[]}', 'template_sync', $4)`,
+              [tf.id, newVersion, bodyResult.data.html_content, actorId || null],
+            );
+            // Update form's current version
+            await sqlClient.unsafe(
+              `UPDATE ${schemaName}.forms SET current_version = $1, updated_at = NOW() WHERE id = $2`,
+              [newVersion, tf.id],
+            );
+          }
+        }
+      } catch (propagationError) {
+        // Log but don't fail the main update
+        request.log.error(propagationError, 'Error propagating template update to tenants');
+      }
+    }
+
     return reply.status(200).send(result);
   });
 
@@ -223,5 +259,48 @@ export async function formTemplateRoutes(
     });
 
     return reply.status(200).send(result);
+  });
+
+  // DELETE /api/form-templates/:id — Delete a form template (only if no tenants use it)
+  fastify.delete('/api/form-templates/:id', async (request, reply) => {
+    const paramResult = formTemplateIdParamSchema.safeParse(request.params);
+    if (!paramResult.success) {
+      return reply.status(400).send({ statusCode: 400, code: 'VALIDATION_ERROR', message: 'ID inválido' });
+    }
+
+    const templateId = paramResult.data.id;
+    const sqlClient = (await import('../../db/index.js')).getSqlClient();
+
+    // Check if any tenant form uses this template
+    try {
+      const schemas = await sqlClient.unsafe(`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'sgr_%'`);
+      const usages: string[] = [];
+
+      for (const schema of schemas) {
+        const result = await sqlClient.unsafe(
+          `SELECT count(*) as cnt FROM ${schema.nspname}.forms WHERE template_id = $1`,
+          [templateId],
+        );
+        const count = parseInt(result[0]?.cnt || '0');
+        if (count > 0) {
+          const tenantSlug = schema.nspname.replace('sgr_', '').replace(/_/g, '-');
+          usages.push(`${tenantSlug} (${count})`);
+        }
+      }
+
+      if (usages.length > 0) {
+        return reply.status(409).send({
+          statusCode: 409,
+          code: 'HAS_RELATIONS',
+          message: `No se puede eliminar: este template está en uso por los tenants: ${usages.join(', ')}. Desactívelo en su lugar.`,
+        });
+      }
+
+      // Safe to delete
+      await service.delete(templateId);
+      return reply.status(200).send({ message: 'Template eliminado' });
+    } catch (error: any) {
+      return reply.status(500).send({ statusCode: 500, message: 'Error al eliminar: ' + (error?.message || 'desconocido') });
+    }
   });
 }

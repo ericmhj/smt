@@ -11,6 +11,7 @@
 
 import puppeteer from 'puppeteer';
 import type { TemplateSection, PdfRenderContext } from '../report-templates/report-template.types.js';
+import { renderFormForPdf } from './pdf-form-renderer.js';
 
 export interface ThemeStyles {
   primaryColor: string;
@@ -70,8 +71,26 @@ export class PdfPipelineService {
     const theme = parseThemeConfig(themeConfig);
     const activeSections = sections.filter((s) => s.is_active).sort((a, b) => a.order - b.order);
 
-    // Build the full HTML document
-    const html = this.buildThemedHtml(activeSections, context, theme);
+    // Check if we have pre-rendered HTML from the form submission
+    const renderedHtml = context.responses?.['__rendered_html'] as string | undefined;
+    const canvasImage = context.responses?.['__canvas_image'] as string | undefined;
+
+    let html: string;
+    if (renderedHtml) {
+      // Use the exact HTML the user saw — just replace canvas with image
+      html = renderedHtml;
+      if (canvasImage) {
+        html = html.replace(
+          /<div id="konva-stage">[\s\S]*?<\/div>/,
+          `<img src="${canvasImage}" style="width:100%;max-width:760px;" />`,
+        );
+      }
+      // Remove buttons
+      html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
+    } else {
+      // Build the full HTML document from template sections
+      html = this.buildThemedHtml(activeSections, context, theme, themeConfig);
+    }
 
     // Render with Puppeteer
     const browser = await puppeteer.launch({
@@ -85,8 +104,9 @@ export class PdfPipelineService {
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
+      const pageSize = this.getPageSize(themeConfig);
       const pdfBuffer = await page.pdf({
-        format: 'A4',
+        format: pageSize as any,
         printBackground: true,
         margin: pageMargins,
       });
@@ -105,7 +125,6 @@ export class PdfPipelineService {
 
     const pageMargins = layout.pageMargins as Record<string, string> | undefined;
     if (!pageMargins) {
-      // Fallback to old "margins" preset
       const preset = layout.margins as string;
       if (preset === 'narrow') return { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' };
       if (preset === 'wide') return { top: '25mm', bottom: '25mm', left: '25mm', right: '25mm' };
@@ -120,17 +139,26 @@ export class PdfPipelineService {
     };
   }
 
+  private getPageSize(themeConfig?: Record<string, unknown>): string {
+    if (!themeConfig) return 'A4';
+    const layout = themeConfig.layout as Record<string, unknown> | undefined;
+    if (!layout) return 'A4';
+    const pageSize = layout.pageSize as string | undefined;
+    return pageSize || 'A4';
+  }
+
   private buildThemedHtml(
     sections: TemplateSection[],
     context: PdfRenderContext,
     theme: ThemeStyles,
+    themeConfig?: Record<string, unknown>,
   ): string {
     const date = new Date(context.createdAt).toLocaleDateString('es-MX');
 
     // Build sections HTML
     let sectionsHtml = '';
     for (const section of sections) {
-      sectionsHtml += this.renderSection(section, context, theme);
+      sectionsHtml += this.renderSection(section, context, theme, themeConfig);
     }
 
     return `<!DOCTYPE html>
@@ -276,17 +304,6 @@ export class PdfPipelineService {
   </style>
 </head>
 <body>
-  <!-- Report Header -->
-  <div class="report-header ${theme.headerStyle}">
-    <h1>${context.formName}</h1>
-    <div class="meta">
-      Técnico: ${context.tecnicoName} (${context.tecnicoEmail}) &bull;
-      Estado: ${context.state} &bull;
-      Intento #${context.attemptNumber} &bull;
-      Fecha: ${date}
-    </div>
-  </div>
-
   ${context.rejectionReason ? `
   <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:10px;margin-bottom:16px;">
     <strong style="color:#dc2626;">Motivo de rechazo:</strong> ${context.rejectionReason}
@@ -307,8 +324,16 @@ export class PdfPipelineService {
     section: TemplateSection,
     context: PdfRenderContext,
     theme: ThemeStyles,
+    themeConfig?: Record<string, unknown>,
   ): string {
+    // For cover_page type, render inline without report-section wrapper
+    if (section.type === 'cover_page') {
+      return this.renderCoverPage(section, context, theme, themeConfig);
+    }
+
     switch (section.type) {
+      case 'cover_page':
+        return this.renderCoverPage(section, context, theme, themeConfig);
       case 'form_content':
         return this.renderFormContent(section, context);
       case 'static':
@@ -326,26 +351,62 @@ export class PdfPipelineService {
     }
   }
 
-  private renderFormContent(section: TemplateSection, context: PdfRenderContext): string {
-    // Use the original form HTML with responses injected
-    const formHtml = context.formHtml || '<p>Sin contenido de formulario</p>';
-    const filledHtml = this.injectResponses(formHtml, context.responses);
+  private renderCoverPage(section: TemplateSection, context: PdfRenderContext, theme: ThemeStyles, themeConfig?: Record<string, unknown>): string {
+    const config = section.config as { content?: string; showDate?: boolean; showTecnico?: boolean };
+    const date = new Date(context.createdAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
+    const hasTecnico = config.showTecnico !== false;
+    const hasDate = config.showDate !== false;
 
+    let lines = '';
+    lines += `<h1 style="font-size:22px;font-weight:700;color:var(--primary-dark);margin:0 0 8px;">${context.formName}</h1>`;
+    if (config.content) lines += `<p style="font-size:14px;color:var(--neutral);margin:0 0 12px;">${config.content}</p>`;
+    lines += `<div style="width:50px;height:2px;background:var(--primary);margin:14px auto;"></div>`;
+    if (hasTecnico) lines += `<p style="font-size:12px;color:var(--text);margin:4px 0;">Técnico: ${context.tecnicoName}</p>`;
+    if (hasDate) lines += `<p style="font-size:12px;color:var(--text);margin:4px 0;">Fecha: ${date}</p>`;
+
+    return `<div style="text-align:center;padding-top:30%;">${lines}</div><div style="page-break-after:always;"></div>`;
+  }
+
+  private renderFormContent(section: TemplateSection, context: PdfRenderContext): string {
+    const responses = context.responses || {};
+
+    // If we have the pre-rendered HTML (captured at submit time), use it directly
+    const renderedHtml = responses['__rendered_html'] as string;
+    if (renderedHtml) {
+      // Replace canvas placeholder with captured image
+      let html = renderedHtml;
+      const canvasImage = responses['__canvas_image'] as string;
+      if (canvasImage) {
+        html = html.replace(
+          /<div id="konva-stage">[\s\S]*?<\/div>/,
+          `<img src="${canvasImage}" style="width:100%;max-width:760px;" />`,
+        );
+      }
+      // Remove interactive elements not needed in PDF
+      html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
+      return `
+      <div class="report-section">
+        ${(section.config as any).printTitle ? `<h2>${section.title}</h2>` : ''}
+        <div class="form-content">${html}</div>
+      </div>`;
+    }
+
+    // Fallback: use server-side renderer
+    const formHtml = context.formHtml || '<p>Sin contenido de formulario</p>';
+    const fallbackHtml = renderFormForPdf(formHtml, responses);
     return `
     <div class="report-section">
-      <h2>${section.title}</h2>
-      <div class="form-content">
-        ${filledHtml}
-      </div>
+      ${(section.config as any).printTitle ? `<h2>${section.title}</h2>` : ''}
+      <div class="form-content">${fallbackHtml}</div>
     </div>`;
   }
 
   private renderStatic(section: TemplateSection): string {
-    const config = section.config as { content?: string };
+    const config = section.config as { content?: string; printTitle?: boolean };
     if (!config.content) return '';
     return `
     <div class="report-section">
-      <h2>${section.title}</h2>
+      ${config.printTitle ? `<h2>${section.title}</h2>` : ''}
       <p>${config.content}</p>
     </div>`;
   }
@@ -354,7 +415,7 @@ export class PdfPipelineService {
     if (context.observations.length === 0) {
       return `
       <div class="report-section obs-section">
-        <h2>${section.title}</h2>
+        ${(section.config as any).printTitle ? `<h2>${section.title}</h2>` : ''}
         <p style="color:var(--neutral);font-style:italic;">Sin observaciones registradas.</p>
       </div>`;
     }
@@ -372,7 +433,7 @@ export class PdfPipelineService {
 
     return `
     <div class="report-section obs-section">
-      <h2>${section.title}</h2>
+      ${(section.config as any).printTitle ? `<h2>${section.title}</h2>` : ''}
       ${items}
     </div>`;
   }
@@ -381,7 +442,7 @@ export class PdfPipelineService {
     if (context.transitions.length === 0) {
       return `
       <div class="report-section">
-        <h2>${section.title}</h2>
+        ${(section.config as any).printTitle ? `<h2>${section.title}</h2>` : ''}
         <p style="color:var(--neutral);font-style:italic;">Sin historial de transiciones.</p>
       </div>`;
     }
@@ -396,7 +457,7 @@ export class PdfPipelineService {
 
     return `
     <div class="report-section">
-      <h2>${section.title}</h2>
+      ${(section.config as any).printTitle ? `<h2>${section.title}</h2>` : ''}
       <table class="history-table">
         <thead><tr><th>Fecha</th><th>Transición</th><th>Motivo</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -416,7 +477,7 @@ export class PdfPipelineService {
 
     return `
     <div class="report-section signatures-section">
-      <h2>${section.title}</h2>
+      ${(section.config as any).printTitle ? `<h2>${section.title}</h2>` : ''}
       <div class="sig-grid">${blocks}</div>
     </div>`;
   }
@@ -425,7 +486,7 @@ export class PdfPipelineService {
     const config = section.config as { htmlContent?: string };
     return `
     <div class="report-section">
-      <h2>${section.title}</h2>
+      ${(section.config as any).printTitle ? `<h2>${section.title}</h2>` : ''}
       ${config.htmlContent || ''}
     </div>`;
   }

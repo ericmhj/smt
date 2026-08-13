@@ -26,6 +26,7 @@ import { clienteRoutes } from './modules/clientes/cliente.routes.js';
 import { documentoRoutes } from './modules/clientes/documento.routes.js';
 import { ticketRoutes } from './modules/tickets/ticket.routes.js';
 import { platformRoutes } from './modules/platform/platform.routes.js';
+import { tenantFormDetailRoutes } from './modules/platform/tenant-form-detail.routes.js';
 import { formTemplateRoutes } from './modules/form-templates/form-template.routes.js';
 import { overrideRoutes } from './modules/validation/override.routes.js';
 import { ruleTemplateRoutes } from './modules/validation/rule-template.routes.js';
@@ -56,6 +57,12 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(cors, {
     origin: true, // Allow all origins in development
     credentials: true,
+  });
+
+  // Prevent browser caching on all API responses
+  app.addHook('onSend', async (_request, reply) => {
+    reply.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+    reply.header('Pragma', 'no-cache');
   });
 
   // Register Swagger/OpenAPI documentation
@@ -98,6 +105,61 @@ export async function buildApp(): Promise<FastifyInstance> {
     adminPassword: config.keycloakAdmin?.adminPassword ?? '',
   });
   await app.register(platformRoutes, { db, keycloakAdmin, standaloneAuth: config.standaloneAuth });
+
+  // Register tenant form detail routes (platform-level, separate to avoid route conflicts)
+  await app.register(tenantFormDetailRoutes);
+
+  // Inline route for tenant form detail (backup in case plugin doesn't load)
+  app.get('/api/platform/tenant-form-edit/:slug/:formId', async (request, reply) => {
+    if (!request.user || (request.user.role !== 'platform_admin' && request.user.role !== 'superusuario')) {
+      return reply.status(403).send({ message: 'Acceso denegado' });
+    }
+    const { slug, formId } = request.params as { slug: string; formId: string };
+    const { getSqlClient } = await import('./db/index.js');
+    const sqlClient = getSqlClient();
+    const schemaName = `sgr_${slug.replace(/-/g, '_')}`;
+    try {
+      const formResult = await sqlClient.unsafe(
+        `SELECT id, name, slug, is_active, current_version, template_id, form_type, created_at, updated_at FROM ${schemaName}.forms WHERE id = $1 LIMIT 1`, [formId]);
+      const form = formResult[0];
+      if (!form) return reply.status(404).send({ message: 'Form not found' });
+      const versionResult = await sqlClient.unsafe(
+        `SELECT html_content, sanitized_html, fields_metadata, version_number FROM ${schemaName}.form_versions WHERE form_id = $1 ORDER BY version_number DESC LIMIT 1`, [formId]);
+      const version = versionResult[0];
+      let htmlContent = version?.html_content || null;
+      if (!htmlContent && form.template_id) {
+        const tmplResult = await sqlClient.unsafe(`SELECT html_content FROM public.form_templates WHERE id = $1`, [form.template_id]);
+        htmlContent = tmplResult[0]?.html_content || null;
+      }
+      return reply.send({ id: form.id, name: form.name, slug: form.slug, isActive: form.is_active, currentVersion: form.current_version, templateId: form.template_id, formType: form.form_type,
+        currentVersionData: htmlContent ? { htmlContent, sanitizedHtml: version?.sanitized_html || htmlContent, versionNumber: version?.version_number || 0 } : null });
+    } catch { return reply.status(404).send({ message: 'Tenant schema not found' }); }
+  });
+
+  app.put('/api/platform/tenant-form-edit/:slug/:formId', async (request, reply) => {
+    if (!request.user || (request.user.role !== 'platform_admin' && request.user.role !== 'superusuario')) {
+      return reply.status(403).send({ message: 'Acceso denegado' });
+    }
+    const { slug, formId } = request.params as { slug: string; formId: string };
+    const body = request.body as { html?: string; newName?: string };
+    if (!body.html) return reply.status(400).send({ message: 'html es requerido' });
+    const { getSqlClient } = await import('./db/index.js');
+    const sqlClient = getSqlClient();
+    const schemaName = `sgr_${slug.replace(/-/g, '_')}`;
+    try {
+      const formResult = await sqlClient.unsafe(`SELECT id, current_version FROM ${schemaName}.forms WHERE id = $1 LIMIT 1`, [formId]);
+      const form = formResult[0];
+      if (!form) return reply.status(404).send({ message: 'Form not found' });
+      const newVersion = form.current_version + 1;
+      await sqlClient.unsafe(
+        `INSERT INTO ${schemaName}.form_versions (form_id, version_number, html_content, sanitized_html, json_schema, fields_metadata, change_type, created_by) VALUES ($1, $2, $3, $3, '{}', '{}', 'update', $4)`,
+        [formId, newVersion, body.html, request.user.sub]);
+      const updates = [`current_version = ${newVersion}`, `updated_at = NOW()`];
+      if (body.newName) updates.push(`name = '${body.newName.replace(/'/g, "''")}'`);
+      await sqlClient.unsafe(`UPDATE ${schemaName}.forms SET ${updates.join(', ')} WHERE id = $1`, [formId]);
+      return reply.send({ message: 'Formulario actualizado', newVersion });
+    } catch (e: any) { return reply.status(500).send({ message: e.message }); }
+  });
 
   // Register user routes
   await app.register(userRoutes, { keycloakAdmin });
