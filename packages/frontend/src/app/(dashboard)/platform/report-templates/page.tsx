@@ -23,6 +23,7 @@ interface TemplateSection {
 interface ReportTemplate {
   id: string;
   formType: string | null;
+  tenantFormId: string | null;
   name: string;
   description: string | null;
   isActive: boolean;
@@ -342,7 +343,9 @@ export default function ReportTemplatesPage() {
             ) : (
               templates.map((t) => {
                 const activated = isActivatedForTenant(t.id);
-                const matchingForm = tenantForms.find((f) => f.form_type === t.formType);
+                const matchingForm = t.tenantFormId
+                  ? tenantForms.find((f) => f.id === t.tenantFormId)
+                  : tenantForms.find((f) => f.form_type === t.formType);
 
                 return (
                   <tr key={t.id} className="hover:bg-gray-50">

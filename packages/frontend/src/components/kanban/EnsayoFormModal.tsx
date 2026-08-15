@@ -91,6 +91,63 @@ window.addEventListener('load', function() {
 });
 </script>` : '';
 
+    // Auto-save script (saves draft every 30 seconds)
+    const autoSaveScript = readOnly ? '' : `
+<script>
+(function() {
+  var saveTimer = null;
+  var lastSaved = '';
+
+  function collectAll() {
+    var inputs = document.querySelectorAll('input,select,textarea');
+    var r = {};
+    inputs.forEach(function(el) {
+      var n = el.getAttribute('name'); if(!n) return;
+      if(el.type==='checkbox') r[n]=el.checked;
+      else if(el.type==='radio'){if(el.checked)r[n]=el.value;}
+      else if(el.type==='number') r[n]=el.value===''?null:Number(el.value);
+      else r[n]=el.value;
+    });
+    document.querySelectorAll('input[type="hidden"]').forEach(function(el) {
+      var n = el.getAttribute('name') || el.getAttribute('id');
+      if(n && el.value) r[n] = el.value;
+    });
+    var pd = document.getElementById('plano-data');
+    if (pd && pd.value) r['plano_areas_json'] = pd.value;
+    // Canvas image
+    try {
+      var stage = window.Konva && Konva.stages && Konva.stages[0];
+      if (stage) r['__canvas_image'] = stage.toDataURL({pixelRatio:1});
+    } catch(e){}
+    return r;
+  }
+
+  function saveDraft() {
+    var r = collectAll();
+    var json = JSON.stringify(r);
+    if (json === lastSaved) return; // no changes
+    lastSaved = json;
+    fetch('${apiBase}/api/reactivos/${reactivoId}/draft', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Authorization':'Bearer ${token}','X-Tenant-Slug':'${tenantSlug}'},
+      body: JSON.stringify({responses: r})
+    }).then(function() {
+      var badge = document.querySelector('.autosave-badge');
+      if (badge) { badge.classList.add('show'); setTimeout(function(){badge.classList.remove('show');},2000); }
+    }).catch(function(){});
+  }
+
+  // Save every 30 seconds
+  setInterval(saveDraft, 30000);
+  // Also save on visibility change (user switching tabs)
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) saveDraft();
+  });
+  // Save on beforeunload
+  window.addEventListener('beforeunload', function() { saveDraft(); });
+})();
+</script>`;
+
     // Submit bar + logic
     const submitScript = readOnly ? `
 <script>
@@ -106,9 +163,16 @@ document.addEventListener('DOMContentLoaded', function() {
 document.addEventListener('DOMContentLoaded', function() {
   var bar = document.createElement('div');
   bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:2px solid #1a6b3a;padding:16px 24px;display:flex;gap:12px;justify-content:center;z-index:9999;box-shadow:0 -4px 12px rgba(0,0,0,0.1)';
-  bar.innerHTML = '<button id="btn-submit" style="background:#1a6b3a;color:white;border:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Enviar Ensayo</button><button id="btn-cancel" style="background:#6b7280;color:white;border:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Cancelar</button>';
+  bar.innerHTML = '<button id="btn-submit" disabled style="background:#1a6b3a;color:white;border:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;opacity:0.5" title="Primero genere las secciones desde el plano de áreas">Enviar Ensayo</button><button id="btn-cancel" style="background:#6b7280;color:white;border:none;padding:12px 32px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Cancelar</button>';
   document.body.appendChild(bar);
   document.body.style.paddingBottom = '80px';
+  // Enable submit if sections were already generated (e.g. from restored draft)
+  setTimeout(function() {
+    if (window.__sectionsValid || document.querySelectorAll('.area-block').length > 0) {
+      var btn = document.getElementById('btn-submit');
+      if(btn){btn.disabled=false;btn.style.opacity='1';}
+    }
+  }, 1500);
 
   document.getElementById('btn-cancel').onclick = function() { window.close(); };
   document.getElementById('btn-submit').onclick = function() {
@@ -194,7 +258,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <title>${readOnly ? 'Ver Formulario' : 'Llenar Ensayo'}</title>
 ${initScript}
 </head>
-<body>${formHtml}${postLoadScript}${submitScript}</body>
+<body>${formHtml}${postLoadScript}${autoSaveScript}${submitScript}</body>
 </html>`;
 
     // Open new window and write HTML

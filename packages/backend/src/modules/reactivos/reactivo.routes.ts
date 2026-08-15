@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { eq } from 'drizzle-orm';
 import { ReactivoService } from './reactivo.service.js';
 import { PDFService } from './pdf.service.js';
 import { ReactivoError } from './reactivo.errors.js';
@@ -11,6 +12,7 @@ import {
   myReactivosQuerySchema,
 } from './reactivo.schemas.js';
 import type { Database } from '../../db/index.js';
+import { reactivos } from '../../db/schema/reactivos.js';
 
 export async function reactivoRoutes(
   fastify: FastifyInstance,
@@ -160,6 +162,45 @@ export async function reactivoRoutes(
           });
         }
         throw error;
+      }
+    },
+  );
+
+  // POST /api/reactivos/:id/draft — save draft (auto-save partial responses)
+  fastify.post(
+    '/api/reactivos/:id/draft',
+    { preHandler: [tecnicoRole] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { responses } = request.body as { responses: Record<string, unknown> };
+
+      try {
+        // Only save draft if reactivo is in 'pendiente' state
+        const [reactivo] = await opts.db
+          .select({ state: reactivos.state, tecnicoId: reactivos.tecnicoId })
+          .from(reactivos)
+          .where(eq(reactivos.id, id))
+          .limit(1);
+
+        if (!reactivo) {
+          return reply.status(404).send({ message: 'Reactivo no encontrado' });
+        }
+        if (reactivo.tecnicoId !== request.user.sub) {
+          return reply.status(403).send({ message: 'No autorizado' });
+        }
+        if (reactivo.state !== 'pendiente') {
+          return reply.status(400).send({ message: 'Solo se puede guardar borrador en estado pendiente' });
+        }
+
+        // Update responses without changing state
+        await opts.db
+          .update(reactivos)
+          .set({ responses, updatedAt: new Date() })
+          .where(eq(reactivos.id, id));
+
+        return reply.status(200).send({ message: 'Borrador guardado' });
+      } catch (error) {
+        return reply.status(500).send({ message: 'Error al guardar borrador' });
       }
     },
   );

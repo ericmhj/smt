@@ -117,7 +117,7 @@ export class PdfPipelineService {
   }
 
   private getPageMargins(themeConfig?: Record<string, unknown>): { top: string; bottom: string; left: string; right: string } {
-    const defaults = { top: '20mm', bottom: '20mm', left: '15mm', right: '15mm' };
+    const defaults = { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' };
     if (!themeConfig) return defaults;
 
     const layout = themeConfig.layout as Record<string, unknown> | undefined;
