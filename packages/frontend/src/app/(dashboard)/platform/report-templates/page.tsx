@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { ThemePanel } from './components/ThemePanel';
+import { createColumnHelper } from '@tanstack/react-table';
+import DataTable from '@/components/ui/DataTable';
 
 interface Tenant {
   id: string;
@@ -299,149 +301,29 @@ export default function ReportTemplatesPage() {
       )}
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Tipo
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Nombre
-              </th>
-              {selectedTenant && (
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Formulario
-                </th>
-              )}
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Global
-              </th>
-              {selectedTenant && (
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Asignado
-                </th>
-              )}
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Acciones
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {loading ? (
-              <tr>
-                <td colSpan={selectedTenant ? 6 : 4} className="px-4 py-8 text-center text-gray-500">
-                  Cargando...
-                </td>
-              </tr>
-            ) : templates.length === 0 ? (
-              <tr>
-                <td colSpan={selectedTenant ? 6 : 4} className="px-4 py-8 text-center text-gray-500">
-                  No hay templates de reporte registrados.
-                </td>
-              </tr>
-            ) : (
-              templates.map((t) => {
-                const activated = isActivatedForTenant(t.id);
-                const matchingForm = t.tenantFormId
-                  ? tenantForms.find((f) => f.id === t.tenantFormId)
-                  : tenantForms.find((f) => f.form_type === t.formType);
-
-                return (
-                  <tr key={t.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800">
-                        {t.formType || 'Sin tipo'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-gray-900">{t.name}</div>
-                      {t.description && (
-                        <div className="text-xs text-gray-500">{t.description}</div>
-                      )}
-                    </td>
-                    {selectedTenant && (
-                      <td className="px-4 py-3">
-                        {matchingForm ? (
-                          <span className="text-sm text-gray-800">{matchingForm.name}</span>
-                        ) : (
-                          <span className="text-xs text-gray-400 italic">Sin formulario</span>
-                        )}
-                      </td>
-                    )}
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => handleToggle(t.id)}
-                        className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
-                          t.isActive
-                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                            : 'bg-red-100 text-red-800 hover:bg-red-200'
-                        }`}
-                      >
-                        {t.isActive ? 'Activo' : 'Inactivo'}
-                      </button>
-                    </td>
-                    {selectedTenant && (
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() =>
-                              activated
-                                ? handleDeactivateForTenant(t.id)
-                                : handleActivateForTenant(t.id)
-                            }
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
-                              activated
-                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                            }`}
-                          >
-                            {activated ? '✅ Asignado' : '⚪ Sin asignar'}
-                          </button>
-                          {activated && (
-                            <button
-                              onClick={() => {
-                                const activation = activations.find((a) => a.report_template_id === t.id);
-                                if (activation) {
-                                  // Find a matching form for auto-theme extraction
-                                  const matchingForm = tenantForms.find((f) => f.form_type === t.formType);
-                                  setThemeTarget({
-                                    activationId: activation.id,
-                                    themeConfig: activation.theme_config || null,
-                                    formId: filterFormType || matchingForm?.id || undefined,
-                                  });
-                                }
-                              }}
-                              className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 cursor-pointer transition-colors"
-                              title="Configurar tema visual"
-                            >
-                              🎨 Tema
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                    <td className="px-4 py-3 text-sm space-x-2">
-                      <Link
-                        href={`/platform/report-templates/${t.id}`}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        Editar
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(t.id, t.name)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Cargando...</div>
+      ) : (
+        <ReportTemplatesDataTable
+          templates={templates}
+          selectedTenant={selectedTenant}
+          tenantForms={tenantForms}
+          activations={activations}
+          filterFormType={filterFormType}
+          isActivatedForTenant={isActivatedForTenant}
+          onToggle={handleToggle}
+          onActivate={handleActivateForTenant}
+          onDeactivate={handleDeactivateForTenant}
+          onDelete={handleDelete}
+          onTheme={(t) => {
+            const activation = activations.find((a) => a.report_template_id === t.id);
+            if (activation) {
+              const mf = tenantForms.find((f) => f.form_type === t.formType);
+              setThemeTarget({ activationId: activation.id, themeConfig: activation.theme_config || null, formId: filterFormType || mf?.id || undefined });
+            }
+          }}
+        />
+      )}
 
       {!selectedTenant && (
         <div className="text-center py-6 text-gray-400 text-sm border border-dashed border-gray-300 rounded-lg">
@@ -465,4 +347,159 @@ export default function ReportTemplatesPage() {
       )}
     </div>
   );
+}
+
+// ─── DataTable sub-component ─────────────────────────────────────────────────
+
+const rtColumnHelper = createColumnHelper<ReportTemplate>();
+
+function ReportTemplatesDataTable({
+  templates,
+  selectedTenant,
+  tenantForms,
+  activations,
+  filterFormType,
+  isActivatedForTenant,
+  onToggle,
+  onActivate,
+  onDeactivate,
+  onDelete,
+  onTheme,
+}: {
+  templates: ReportTemplate[];
+  selectedTenant: string;
+  tenantForms: Array<{ id: string; form_type: string; name: string }>;
+  activations: Activation[];
+  filterFormType: string;
+  isActivatedForTenant: (id: string) => boolean;
+  onToggle: (id: string) => void;
+  onActivate: (id: string) => void;
+  onDeactivate: (id: string) => void;
+  onDelete: (id: string, name: string) => void;
+  onTheme: (t: ReportTemplate) => void;
+}) {
+  const columns = useMemo(() => {
+    const cols: any[] = [
+      rtColumnHelper.accessor('formType', {
+        header: 'Tipo',
+        cell: (info) => (
+          <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800">
+            {info.getValue() || 'Sin tipo'}
+          </span>
+        ),
+      }),
+      rtColumnHelper.accessor('name', {
+        header: 'Nombre',
+        cell: (info) => {
+          const t = info.row.original;
+          return (
+            <div>
+              <div className="font-medium text-gray-900">{info.getValue()}</div>
+              {t.description && <div className="text-xs text-gray-500">{t.description}</div>}
+            </div>
+          );
+        },
+      }),
+    ];
+
+    if (selectedTenant) {
+      cols.push(
+        rtColumnHelper.display({
+          id: 'formulario',
+          header: 'Formulario',
+          enableColumnFilter: false,
+          cell: (info) => {
+            const t = info.row.original;
+            const mf = t.tenantFormId
+              ? tenantForms.find((f) => f.id === t.tenantFormId)
+              : tenantForms.find((f) => f.form_type === t.formType);
+            return mf
+              ? <span className="text-sm text-gray-800">{mf.name}</span>
+              : <span className="text-xs text-gray-400 italic">Sin formulario</span>;
+          },
+        }),
+      );
+    }
+
+    cols.push(
+      rtColumnHelper.accessor('isActive', {
+        header: 'Estado',
+        filterFn: (row, _columnId, filterValue) => {
+          const label = row.original.isActive ? 'activo' : 'inactivo';
+          return label.startsWith(filterValue.toLowerCase());
+        },
+        cell: (info) => {
+          const t = info.row.original;
+          return (
+            <button
+              onClick={() => onToggle(t.id)}
+              className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
+                t.isActive ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
+              }`}
+            >
+              {t.isActive ? 'Activo' : 'Inactivo'}
+            </button>
+          );
+        },
+      }),
+    );
+
+    if (selectedTenant) {
+      cols.push(
+        rtColumnHelper.display({
+          id: 'asignado',
+          header: 'Asignado',
+          enableColumnFilter: false,
+          enableSorting: false,
+          cell: (info) => {
+            const t = info.row.original;
+            const activated = isActivatedForTenant(t.id);
+            return (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => activated ? onDeactivate(t.id) : onActivate(t.id)}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
+                    activated ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {activated ? '✅ Asignado' : '⚪ Sin asignar'}
+                </button>
+                {activated && (
+                  <button
+                    onClick={() => onTheme(t)}
+                    className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 cursor-pointer"
+                    title="Configurar tema visual"
+                  >
+                    🎨 Tema
+                  </button>
+                )}
+              </div>
+            );
+          },
+        }),
+      );
+    }
+
+    cols.push(
+      rtColumnHelper.display({
+        id: 'acciones',
+        header: 'Acciones',
+        enableSorting: false,
+        enableColumnFilter: false,
+        cell: (info) => {
+          const t = info.row.original;
+          return (
+            <div className="space-x-2">
+              <Link href={`/platform/report-templates/${t.id}`} className="text-blue-600 hover:text-blue-800">Editar</Link>
+              <button onClick={() => onDelete(t.id, t.name)} className="text-red-600 hover:text-red-800">Eliminar</button>
+            </div>
+          );
+        },
+      }),
+    );
+
+    return cols;
+  }, [selectedTenant, tenantForms, activations, isActivatedForTenant, onToggle, onActivate, onDeactivate, onDelete, onTheme]);
+
+  return <DataTable data={templates} columns={columns} columnFiltering globalFilter={false} />;
 }

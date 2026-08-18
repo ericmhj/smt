@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { createColumnHelper } from '@tanstack/react-table';
+import DataTable from '@/components/ui/DataTable';
 
 interface RuleSection {
   sectionName: string;
@@ -35,7 +37,6 @@ export default function ValidationRulesPage() {
   const [filterFormType, setFilterFormType] = useState('');
   const [formTypes, setFormTypes] = useState<string[]>([]);
 
-  // Load form types from templates (Formularios Padre)
   useEffect(() => {
     api<Array<{ formType: string }>>('/api/form-templates/all')
       .then((templates) => {
@@ -60,9 +61,7 @@ export default function ValidationRulesPage() {
     }
   };
 
-  useEffect(() => {
-    fetchRules();
-  }, [filterFormType]);
+  useEffect(() => { fetchRules(); }, [filterFormType]);
 
   const handleToggle = async (id: string) => {
     try {
@@ -74,7 +73,7 @@ export default function ValidationRulesPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`¿Eliminar la regla "${name}"? Esta acción no se puede deshacer.`)) return;
+    if (!confirm(`¿Eliminar la regla "${name}"?`)) return;
     try {
       await api(`/api/validation-rules/${id}`, { method: 'DELETE' });
       await fetchRules();
@@ -98,98 +97,109 @@ export default function ValidationRulesPage() {
         </Link>
       </div>
 
-      {/* Filter */}
-      <div className="flex gap-4">
-        <select
-          value={filterFormType}
-          onChange={(e) => setFilterFormType(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-          aria-label="Filtrar por tipo de formulario"
-        >
-          <option value="">Todos los tipos</option>
-          {formTypes.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Secciones</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">Cargando...</td>
-              </tr>
-            ) : rules.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">No hay reglas registradas.</td>
-              </tr>
-            ) : (
-              rules.map((r) => (
-                <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
-                      {r.formType}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="text-sm font-medium text-gray-900">{r.name}</div>
-                    {r.description && <div className="text-xs text-gray-500">{r.description}</div>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {r.sections.map((s, i) => (
-                        <span key={i} className="inline-flex px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700">
-                          {s.sectionName}: {PATTERN_LABELS[s.pattern] || s.pattern}
-                          {s.fieldOverrides && s.fieldOverrides.length > 0 && (
-                            <span className="ml-1 text-gray-400">+{s.fieldOverrides.length}</span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => handleToggle(r.id)}
-                      className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
-                        r.isActive
-                          ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                          : 'bg-red-100 text-red-800 hover:bg-red-200'
-                      }`}
-                    >
-                      {r.isActive ? 'Activa' : 'Inactiva'}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-sm space-x-2">
-                    <Link
-                      href={`/platform/validation-rules/editar/${r.id}`}
-                      className="text-blue-600 hover:text-blue-800"
-                    >
-                      Editar
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(r.id, r.name)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Cargando...</div>
+      ) : (
+        <RulesDataTable rules={rules} onToggle={handleToggle} onDelete={handleDelete} />
+      )}
     </div>
   );
+}
+
+// ─── DataTable sub-component ─────────────────────────────────────────────────
+
+const ruleColumnHelper = createColumnHelper<ValidationRule>();
+
+function RulesDataTable({
+  rules,
+  onToggle,
+  onDelete,
+}: {
+  rules: ValidationRule[];
+  onToggle: (id: string) => void;
+  onDelete: (id: string, name: string) => void;
+}) {
+  const columns = useMemo(() => [
+    ruleColumnHelper.accessor('formType', {
+      header: 'Tipo',
+      cell: (info) => (
+        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+          {info.getValue()}
+        </span>
+      ),
+    }),
+    ruleColumnHelper.accessor('name', {
+      header: 'Nombre',
+      cell: (info) => {
+        const r = info.row.original;
+        return (
+          <div>
+            <div className="font-medium text-gray-900">{info.getValue()}</div>
+            {r.description && <div className="text-xs text-gray-500">{r.description}</div>}
+          </div>
+        );
+      },
+    }),
+    ruleColumnHelper.display({
+      id: 'secciones',
+      header: 'Secciones',
+      enableColumnFilter: true,
+      filterFn: (row, _columnId, filterValue) => {
+        const sections = row.original.sections.map(s => s.sectionName).join(' ');
+        return sections.toLowerCase().includes(filterValue.toLowerCase());
+      },
+      cell: (info) => {
+        const r = info.row.original;
+        return (
+          <div className="flex flex-wrap gap-1">
+            {r.sections.map((s, i) => (
+              <span key={i} className="inline-flex px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700">
+                {s.sectionName}: {PATTERN_LABELS[s.pattern] || s.pattern}
+                {s.fieldOverrides && s.fieldOverrides.length > 0 && (
+                  <span className="ml-1 text-gray-400">+{s.fieldOverrides.length}</span>
+                )}
+              </span>
+            ))}
+          </div>
+        );
+      },
+    }),
+    ruleColumnHelper.accessor('isActive', {
+      header: 'Estado',
+      filterFn: (row, _columnId, filterValue) => {
+        const label = row.original.isActive ? 'activa' : 'inactiva';
+        return label.startsWith(filterValue.toLowerCase());
+      },
+      cell: (info) => {
+        const r = info.row.original;
+        return (
+          <button
+            onClick={() => onToggle(r.id)}
+            className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
+              r.isActive ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
+            }`}
+          >
+            {r.isActive ? 'Activa' : 'Inactiva'}
+          </button>
+        );
+      },
+    }),
+    ruleColumnHelper.display({
+      id: 'acciones',
+      header: 'Acciones',
+      enableSorting: false,
+      enableColumnFilter: false,
+      cell: (info) => {
+        const r = info.row.original;
+        return (
+          <div className="space-x-2">
+            <Link href={`/platform/validation-rules/editar/${r.id}`} className="text-blue-600 hover:text-blue-800">Editar</Link>
+            <button onClick={() => onDelete(r.id, r.name)} className="text-red-600 hover:text-red-800">Eliminar</button>
+          </div>
+        );
+      },
+    }),
+  ], [onToggle, onDelete]);
+
+  return <DataTable data={rules} columns={columns} columnFiltering globalFilter={false} />;
 }

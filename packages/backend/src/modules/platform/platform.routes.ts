@@ -487,46 +487,22 @@ export async function platformRoutes(
     });
   });
 
-  // PUT /api/platform/tenants/:id/suspend — Suspend a tenant
-  fastify.put('/api/platform/tenants/:id/suspend', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id } = request.params as { id: string };
-
-    try {
-      const tenant = await lifecycleService.suspendTenant(id);
-      return reply.status(200).send(tenant);
-    } catch (error) {
-      if (error instanceof TenantLifecycleError) {
-        return reply.status(error.statusCode).send({
-          statusCode: error.statusCode,
-          code: error.code,
-          message: error.message,
-          timestamp: new Date().toISOString(),
-          requestId: request.id,
-        });
-      }
-      throw error;
-    }
+  // PUT /api/platform/tenants/:id/suspend — DISABLED
+  fastify.put('/api/platform/tenants/:id/suspend', async (_request: FastifyRequest, reply: FastifyReply) => {
+    return reply.status(403).send({
+      statusCode: 403,
+      code: 'OPERATION_DISABLED',
+      message: 'Petición improcedente',
+    });
   });
 
-  // PUT /api/platform/tenants/:id/activate — Reactivate a tenant
-  fastify.put('/api/platform/tenants/:id/activate', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id } = request.params as { id: string };
-
-    try {
-      const tenant = await lifecycleService.activateTenant(id);
-      return reply.status(200).send(tenant);
-    } catch (error) {
-      if (error instanceof TenantLifecycleError) {
-        return reply.status(error.statusCode).send({
-          statusCode: error.statusCode,
-          code: error.code,
-          message: error.message,
-          timestamp: new Date().toISOString(),
-          requestId: request.id,
-        });
-      }
-      throw error;
-    }
+  // PUT /api/platform/tenants/:id/activate — DISABLED
+  fastify.put('/api/platform/tenants/:id/activate', async (_request: FastifyRequest, reply: FastifyReply) => {
+    return reply.status(403).send({
+      statusCode: 403,
+      code: 'OPERATION_DISABLED',
+      message: 'Petición improcedente',
+    });
   });
 
   // DELETE /api/platform/tenants/:id — Schedule deletion

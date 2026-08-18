@@ -19,6 +19,7 @@ interface DataTableProps<T> {
   pageSize?: number;
   searchPlaceholder?: string;
   globalFilter?: boolean;
+  columnFiltering?: boolean;
 }
 
 export default function DataTable<T>({
@@ -27,6 +28,7 @@ export default function DataTable<T>({
   pageSize = 20,
   searchPlaceholder = 'Buscar...',
   globalFilter = true,
+  columnFiltering = false,
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -98,6 +100,23 @@ export default function DataTable<T>({
                 ))}
               </tr>
             ))}
+            {columnFiltering && (
+              <tr>
+                {table.getHeaderGroups()[0]?.headers.map((header) => (
+                  <th key={header.id} className="px-4 py-1">
+                    {header.column.getCanFilter() ? (
+                      <input
+                        type="text"
+                        value={(header.column.getFilterValue() ?? '') as string}
+                        onChange={(e) => header.column.setFilterValue(e.target.value)}
+                        placeholder="Filtrar..."
+                        className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                    ) : null}
+                  </th>
+                ))}
+              </tr>
+            )}
           </thead>
           <tbody className="divide-y divide-gray-200">
             {table.getRowModel().rows.length === 0 ? (

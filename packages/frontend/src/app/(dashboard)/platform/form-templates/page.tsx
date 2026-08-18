@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { createColumnHelper } from '@tanstack/react-table';
+import DataTable from '@/components/ui/DataTable';
 
 interface FormTemplate {
   id: string;
@@ -92,80 +94,16 @@ export default function FormTemplatesPage() {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Versión</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Secciones</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Última modificación</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {loading ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-500">Cargando...</td>
-              </tr>
-            ) : templates.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No hay templates registrados.</td>
-              </tr>
-            ) : (
-              templates.map((t) => (
-                <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                      {t.formType}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{t.name}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{t.description || '—'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">v{t.currentVersion}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{t.fieldsMetadata?.sections?.length || 0}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {t.updatedAt ? new Date(t.updatedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => handleToggle(t.id)}
-                      className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
-                        t.isActive
-                          ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                          : 'bg-red-100 text-red-800 hover:bg-red-200'
-                      }`}
-                    >
-                      {t.isActive ? 'Activo' : 'Inactivo'}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-sm space-x-2">
-                    <button
-                      onClick={() => handlePreview(t)}
-                      className="text-gray-600 hover:text-gray-800"
-                    >
-                      Vista previa
-                    </button>
-                    <Link
-                      href={`/platform/form-templates/editar/${t.id}`}
-                      className="text-blue-600 hover:text-blue-800"
-                    >
-                      Editar
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(t.id, t.name)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        {loading ? (
+          <div className="px-4 py-8 text-center text-gray-500">Cargando...</div>
+        ) : (
+          <TemplatesDataTable
+            templates={templates}
+            onToggle={handleToggle}
+            onPreview={handlePreview}
+            onDelete={handleDelete}
+          />
+        )}
       </div>
 
       {/* Preview Modal */}
@@ -215,4 +153,91 @@ export default function FormTemplatesPage() {
       )}
     </div>
   );
+}
+
+// ─── DataTable sub-component ─────────────────────────────────────────────────
+
+const templateColumnHelper = createColumnHelper<FormTemplate>();
+
+function TemplatesDataTable({
+  templates,
+  onToggle,
+  onPreview,
+  onDelete,
+}: {
+  templates: FormTemplate[];
+  onToggle: (id: string) => void;
+  onPreview: (t: FormTemplate) => void;
+  onDelete: (id: string, name: string) => void;
+}) {
+  const columns = useMemo(() => [
+    templateColumnHelper.accessor('formType', {
+      header: 'Tipo',
+      cell: (info) => (
+        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+          {info.getValue()}
+        </span>
+      ),
+    }),
+    templateColumnHelper.accessor('name', {
+      header: 'Nombre',
+      cell: (info) => <span className="font-medium text-gray-900">{info.getValue()}</span>,
+    }),
+    templateColumnHelper.accessor('updatedAt', {
+      header: 'Última modificación',
+      filterFn: (row, _columnId, filterValue) => {
+        const dateStr = row.original.updatedAt;
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return false;
+        const formatted = d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        return formatted.toLowerCase().includes(filterValue.toLowerCase());
+      },
+      cell: (info) => {
+        const dateStr = info.getValue();
+        if (!dateStr) return '—';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '—';
+        return <span className="text-gray-500">{d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>;
+      },
+    }),
+    templateColumnHelper.accessor('isActive', {
+      header: 'Estado',
+      filterFn: (row, _columnId, filterValue) => {
+        const label = row.original.isActive ? 'activo' : 'inactivo';
+        return label.startsWith(filterValue.toLowerCase());
+      },
+      cell: (info) => {
+        const t = info.row.original;
+        return (
+          <button
+            onClick={() => onToggle(t.id)}
+            className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
+              t.isActive ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
+            }`}
+          >
+            {t.isActive ? 'Activo' : 'Inactivo'}
+          </button>
+        );
+      },
+    }),
+    templateColumnHelper.display({
+      id: 'acciones',
+      header: 'Acciones',
+      enableSorting: false,
+      enableColumnFilter: false,
+      cell: (info) => {
+        const t = info.row.original;
+        return (
+          <div className="space-x-2">
+            <button onClick={() => onPreview(t)} className="text-gray-600 hover:text-gray-800">Vista previa</button>
+            <Link href={`/platform/form-templates/editar/${t.id}`} className="text-blue-600 hover:text-blue-800">Editar</Link>
+            <button onClick={() => onDelete(t.id, t.name)} className="text-red-600 hover:text-red-800">Eliminar</button>
+          </div>
+        );
+      },
+    }),
+  ], [onToggle, onPreview, onDelete]);
+
+  return <DataTable data={templates} columns={columns} columnFiltering globalFilter={false} />;
 }

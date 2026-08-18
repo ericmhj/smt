@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { createColumnHelper } from '@tanstack/react-table';
+import DataTable from '@/components/ui/DataTable';
 
 interface Tenant {
   id: string;
@@ -25,32 +27,26 @@ interface TenantsResponse {
 }
 
 const statusStyles: Record<string, string> = {
-  active: 'bg-green-100 text-green-800',
-  suspended: 'bg-yellow-100 text-yellow-800',
-  pending_deletion: 'bg-red-100 text-red-800',
+  active: 'bg-green-100 text-green-800 hover:bg-green-200',
+  suspended: 'bg-red-100 text-red-800 hover:bg-red-200',
+  pending_deletion: 'bg-red-100 text-red-800 hover:bg-red-200',
 };
 
 const statusLabels: Record<string, string> = {
   active: 'Activo',
-  suspended: 'Suspendido',
-  pending_deletion: 'Pendiente de eliminación',
+  suspended: 'Inactivo',
+  pending_deletion: 'Inactivo',
 };
 
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>('');
 
-  const fetchTenants = async (page = 1) => {
+  const fetchTenants = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), limit: '20' });
-      if (statusFilter) params.append('status', statusFilter);
-
-      const response = await api<TenantsResponse>(`/api/platform/tenants?${params}`);
+      const response = await api<TenantsResponse>('/api/platform/tenants?limit=100');
       setTenants(response.data);
-      setPagination(response.pagination);
     } catch (error) {
       console.error('Error fetching tenants:', error);
     } finally {
@@ -58,9 +54,20 @@ export default function TenantsPage() {
     }
   };
 
-  useEffect(() => {
-    fetchTenants();
-  }, [statusFilter]);
+  useEffect(() => { fetchTenants(); }, []);
+
+  const handleToggleStatus = async (tenant: Tenant) => {
+    try {
+      if (tenant.status === 'active') {
+        await api(`/api/platform/tenants/${tenant.id}/suspend`, { method: 'PUT' });
+      } else {
+        await api(`/api/platform/tenants/${tenant.id}/activate`, { method: 'PUT' });
+      }
+      await fetchTenants();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al cambiar estado');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -77,109 +84,75 @@ export default function TenantsPage() {
         </Link>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-4">
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-          aria-label="Filtrar por estado"
-        >
-          <option value="">Todos los estados</option>
-          <option value="active">Activo</option>
-          <option value="suspended">Suspendido</option>
-          <option value="pending_deletion">Pendiente de eliminación</option>
-        </select>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">URL de Acceso</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Admin (Usuario)</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-4 text-center text-gray-500">Cargando...</td>
-              </tr>
-            ) : tenants.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-4 text-center text-gray-500">No se encontraron tenants</td>
-              </tr>
-            ) : (
-              tenants.map((tenant) => {
-                const tenantUrl = `http://${tenant.slug}.localhost:3000`;
-                return (
-                  <tr key={tenant.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <Link
-                        href={`/admin/tenants/${tenant.id}`}
-                        className="text-sm font-medium text-blue-600 hover:text-blue-800"
-                      >
-                        {tenant.nombre}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <a
-                        href={tenantUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs font-mono text-blue-600 hover:text-blue-800 underline"
-                      >
-                        {tenant.slug}.localhost:3000
-                      </a>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700 font-mono">
-                      {tenant.adminEmail || '—'}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 capitalize">{tenant.plan}</td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusStyles[tenant.status] || 'bg-gray-100 text-gray-800'}`}>
-                        {statusLabels[tenant.status] || tenant.status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            Mostrando {tenants.length} de {pagination.total} tenants
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => fetchTenants(pagination.page - 1)}
-              disabled={pagination.page <= 1}
-              className="px-3 py-1 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-            >
-              Anterior
-            </button>
-            <span className="px-3 py-1 text-sm text-gray-600">
-              Página {pagination.page} de {pagination.totalPages}
-            </span>
-            <button
-              onClick={() => fetchTenants(pagination.page + 1)}
-              disabled={pagination.page >= pagination.totalPages}
-              className="px-3 py-1 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-            >
-              Siguiente
-            </button>
-          </div>
-        </div>
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Cargando...</div>
+      ) : (
+        <TenantsDataTable tenants={tenants} onToggleStatus={handleToggleStatus} />
       )}
     </div>
   );
+}
+
+// ─── DataTable sub-component ─────────────────────────────────────────────────
+
+const tenantColumnHelper = createColumnHelper<Tenant>();
+
+function TenantsDataTable({
+  tenants,
+  onToggleStatus,
+}: {
+  tenants: Tenant[];
+  onToggleStatus: (t: Tenant) => void;
+}) {
+  const columns = useMemo(() => [
+    tenantColumnHelper.accessor('nombre', {
+      header: 'Nombre',
+      cell: (info) => (
+        <Link
+          href={`/admin/tenants/${info.row.original.id}`}
+          className="font-medium text-blue-600 hover:text-blue-800"
+        >
+          {info.getValue()}
+        </Link>
+      ),
+    }),
+    tenantColumnHelper.accessor('slug', {
+      header: 'URL de Acceso',
+      cell: (info) => (
+        <a
+          href={`http://${info.getValue()}.localhost:3000`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs font-mono text-blue-600 hover:text-blue-800 underline"
+        >
+          {info.getValue()}.localhost:3000
+        </a>
+      ),
+    }),
+    tenantColumnHelper.accessor('adminEmail', {
+      header: 'Admin (Usuario)',
+      cell: (info) => <span className="text-gray-700 font-mono">{info.getValue() || '—'}</span>,
+    }),
+    tenantColumnHelper.accessor('plan', {
+      header: 'Plan',
+      cell: (info) => <span className="text-gray-600 capitalize">{info.getValue()}</span>,
+    }),
+    tenantColumnHelper.accessor('status', {
+      header: 'Estado',
+      filterFn: (row, _columnId, filterValue) => {
+        const label = statusLabels[row.original.status] || row.original.status;
+        return label.toLowerCase().startsWith(filterValue.toLowerCase());
+      },
+      cell: (info) => {
+        const t = info.row.original;
+        return (
+          <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusStyles[t.status] || 'bg-gray-100 text-gray-800'}`}>
+            {statusLabels[t.status] || t.status}
+          </span>
+        );
+      },
+    }),
+  ], [onToggleStatus]);
+
+  return <DataTable data={tenants} columns={columns} columnFiltering globalFilter={false} />;
 }

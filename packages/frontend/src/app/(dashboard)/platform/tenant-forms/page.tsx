@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { api, ApiError } from '@/lib/api';
+import { createColumnHelper } from '@tanstack/react-table';
+import DataTable from '@/components/ui/DataTable';
 
 interface Tenant {
   id: string;
@@ -322,98 +324,18 @@ export default function TenantFormsPage() {
       </div>
 
       {/* Forms table */}
-      {selectedTenant && (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Template</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reporte Asignado</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Versión</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Última modificación</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {loadingForms ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Cargando...</td></tr>
-              ) : forms.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Sin formularios en este tenant.</td></tr>
-              ) : (
-                forms.map((f) => {
-                  const reportName = getReportTemplateName(f);
-                  return (
-                    <tr key={f.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{f.name}</td>
-                      <td className="px-4 py-3">
-                        {f.template_id ? (
-                          <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
-                            {f.form_type}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-400">Manual</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {reportName ? (
-                          <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-800">
-                            📄 {reportName}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-400">Sin reporte</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">v{f.current_version}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        {(() => {
-                          const dateStr = f.updated_at || f.created_at;
-                          if (!dateStr) return '—';
-                          const d = new Date(dateStr);
-                          if (isNaN(d.getTime())) return '—';
-                          return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-                        })()}
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => handleToggleForm(f)}
-                          className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
-                            f.is_active
-                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                              : 'bg-red-100 text-red-800 hover:bg-red-200'
-                          }`}
-                        >
-                          {f.is_active ? 'Activo' : 'Inactivo'}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-sm space-x-3">
-                        <button
-                          onClick={() => openPreviewModal(f)}
-                          className="text-gray-600 hover:text-gray-800"
-                        >
-                          Vista previa
-                        </button>
-                        <button
-                          onClick={() => openEditModal(f)}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => handleDeleteForm(f)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          Eliminar
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+      {selectedTenant && !loadingForms && (
+        <FormsDataTable
+          forms={forms}
+          getReportTemplateName={getReportTemplateName}
+          onToggle={handleToggleForm}
+          onPreview={openPreviewModal}
+          onEdit={openEditModal}
+          onDelete={handleDeleteForm}
+        />
+      )}
+      {selectedTenant && loadingForms && (
+        <div className="text-center py-8 text-gray-500">Cargando...</div>
       )}
 
       {!selectedTenant && (
@@ -655,4 +577,118 @@ export default function TenantFormsPage() {
       )}
     </div>
   );
+}
+
+// ─── DataTable sub-component ─────────────────────────────────────────────────
+
+const columnHelper = createColumnHelper<TenantForm>();
+
+function FormsDataTable({
+  forms,
+  getReportTemplateName,
+  onToggle,
+  onPreview,
+  onEdit,
+  onDelete,
+}: {
+  forms: TenantForm[];
+  getReportTemplateName: (f: TenantForm) => string | null;
+  onToggle: (f: TenantForm) => void;
+  onPreview: (f: TenantForm) => void;
+  onEdit: (f: TenantForm) => void;
+  onDelete: (f: TenantForm) => void;
+}) {
+  const columns = useMemo(() => [
+    columnHelper.accessor('name', {
+      header: 'Nombre',
+      cell: (info) => <span className="font-medium text-gray-900">{info.getValue()}</span>,
+    }),
+    columnHelper.accessor('form_type', {
+      header: 'Template',
+      cell: (info) => {
+        const row = info.row.original;
+        return row.template_id ? (
+          <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+            {info.getValue()}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">Manual</span>
+        );
+      },
+    }),
+    columnHelper.display({
+      id: 'reporte',
+      header: 'Reporte Asignado',
+      cell: (info) => {
+        const reportName = getReportTemplateName(info.row.original);
+        return reportName ? (
+          <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-800">
+            📄 {reportName}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">Sin reporte</span>
+        );
+      },
+    }),
+    columnHelper.accessor('current_version', {
+      header: 'Versión',
+      cell: (info) => <span className="text-gray-500">v{info.getValue()}</span>,
+    }),
+    columnHelper.accessor('updated_at', {
+      header: 'Última modificación',
+      filterFn: (row, _columnId, filterValue) => {
+        const dateStr = row.original.updated_at || row.original.created_at;
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return false;
+        const formatted = d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        return formatted.toLowerCase().includes(filterValue.toLowerCase());
+      },
+      cell: (info) => {
+        const dateStr = info.getValue() || info.row.original.created_at;
+        if (!dateStr) return '—';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '—';
+        return <span className="text-gray-500">{d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>;
+      },
+    }),
+    columnHelper.accessor('is_active', {
+      header: 'Estado',
+      filterFn: (row, _columnId, filterValue) => {
+        const label = row.original.is_active ? 'activo' : 'inactivo';
+        return label.startsWith(filterValue.toLowerCase());
+      },
+      cell: (info) => {
+        const row = info.row.original;
+        return (
+          <button
+            onClick={() => onToggle(row)}
+            className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full cursor-pointer transition-colors ${
+              row.is_active ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
+            }`}
+          >
+            {row.is_active ? 'Activo' : 'Inactivo'}
+          </button>
+        );
+      },
+    }),
+    columnHelper.display({
+      id: 'acciones',
+      header: 'Acciones',
+      enableSorting: false,
+      enableColumnFilter: false,
+      cell: (info) => {
+        const row = info.row.original;
+        return (
+          <div className="space-x-3">
+            <button onClick={() => onPreview(row)} className="text-gray-600 hover:text-gray-800">Vista previa</button>
+            <button onClick={() => onEdit(row)} className="text-blue-600 hover:text-blue-800 font-medium">Editar</button>
+            <button onClick={() => onDelete(row)} className="text-red-600 hover:text-red-800">Eliminar</button>
+          </div>
+        );
+      },
+    }),
+  ], [getReportTemplateName, onToggle, onPreview, onEdit, onDelete]);
+
+  return <DataTable data={forms} columns={columns} columnFiltering globalFilter={false} />;
 }
