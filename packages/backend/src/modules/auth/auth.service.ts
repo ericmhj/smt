@@ -237,6 +237,10 @@ export class AuthService {
       throw new AuthError(500, AuthErrorCode.TOKEN_INVALID, 'Servicio de autenticación no inicializado');
     }
 
+    // Técnico role gets shorter-lived tokens aligned to session countdown (7 min)
+    const accessExpiry = role === 'tecnico' ? '7m' : this.config.accessTokenExpiry;
+    const refreshExpiry = role === 'tecnico' ? '8m' : this.config.refreshTokenExpiry;
+
     const accessTokenJti = randomUUID();
     const refreshTokenJti = randomUUID();
 
@@ -245,7 +249,7 @@ export class AuthService {
       .setProtectedHeader({ alg: 'RS256' })
       .setSubject(userId)
       .setIssuedAt()
-      .setExpirationTime(this.config.accessTokenExpiry)
+      .setExpirationTime(accessExpiry)
       .setIssuer(this.config.issuer)
       .setJti(accessTokenJti)
       .sign(this.privateKey);
@@ -255,13 +259,13 @@ export class AuthService {
       .setProtectedHeader({ alg: 'RS256' })
       .setSubject(userId)
       .setIssuedAt()
-      .setExpirationTime(this.config.refreshTokenExpiry)
+      .setExpirationTime(refreshExpiry)
       .setIssuer(this.config.issuer)
       .setJti(refreshTokenJti)
       .sign(this.privateKey);
 
     // Store refresh token in Redis with TTL (tenant-namespaced)
-    const refreshTtlSeconds = this.parseExpiryToSeconds(this.config.refreshTokenExpiry);
+    const refreshTtlSeconds = this.parseExpiryToSeconds(refreshExpiry);
     const redisKey = tenantKey(tenantSlug, 'refresh', userId, refreshTokenJti);
     await this.redis.set(redisKey, '1', 'EX', refreshTtlSeconds);
 

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '@/lib/api';
 import { extractTenantSlug } from '@/lib/tenant';
 import { useAuth } from '@/contexts/AuthContext';
 import KanbanColumn from '@/components/kanban/KanbanColumn';
+import KanbanFilters, { KanbanFilterValues } from '@/components/kanban/KanbanFilters';
 import { KanbanCardData } from '@/components/kanban/KanbanCard';
 import EnsayoFormModal from '@/components/kanban/EnsayoFormModal';
 import RejectionInfoModal from '@/components/kanban/RejectionInfoModal';
@@ -49,6 +50,14 @@ export default function MyKanbanPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [data, setData] = useState<KanbanColumnData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState<KanbanFilterValues>({
+    tecnicoId: '',
+    formId: '',
+    dateFrom: '',
+    dateTo: '',
+    clientSearch: '',
+    onlyUnread: false,
+  });
 
   // Modal state
   const [activeModal, setActiveModal] = useState<ActiveModal>('none');
@@ -75,19 +84,54 @@ export default function MyKanbanPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const result = await api<KanbanResponse>(`/api/kanban?tecnicoId=${user.id}`);
+      const params = new URLSearchParams();
+      params.set('tecnicoId', user.id);
+      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
+      if (filters.dateTo) params.set('dateTo', filters.dateTo);
+      const result = await api<KanbanResponse>(`/api/kanban?${params.toString()}`);
       setData(result.columns || []);
     } catch {
       setData([]);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, filters.dateFrom, filters.dateTo]);
 
   useEffect(() => {
     if (!user || authLoading) return;
     fetchKanban();
   }, [user, authLoading, fetchKanban]);
+
+  // Extract unique form names from board cards for the filter dropdown
+  const formOptions = useMemo(() => {
+    const seen = new Map<string, boolean>();
+    data.forEach((col) => {
+      col.cards.forEach((card) => {
+        if (!seen.has(card.formName)) {
+          seen.set(card.formName, true);
+        }
+      });
+    });
+    return Array.from(seen.keys()).map((name) => ({ id: name, name }));
+  }, [data]);
+
+  // Client-side filtering (form name, search + unread)
+  const filteredData = useMemo(() => {
+    return data.map((column) => ({
+      ...column,
+      cards: column.cards.filter((card) => {
+        if (filters.formId && card.formName !== filters.formId) return false;
+        if (filters.clientSearch) {
+          const search = filters.clientSearch.toLowerCase();
+          const matchesClient = card.clienteNombre?.toLowerCase().includes(search);
+          const matchesForm = card.formName.toLowerCase().includes(search);
+          if (!matchesClient && !matchesForm) return false;
+        }
+        if (filters.onlyUnread && card.unreadObservations === 0) return false;
+        return true;
+      }),
+    }));
+  }, [data, filters.formId, filters.clientSearch, filters.onlyUnread]);
 
   if (authLoading || !user) return <p className="text-gray-500">Cargando...</p>;
 
@@ -309,9 +353,7 @@ export default function MyKanbanPage() {
     }
   };
 
-  if (loading) return <p className="text-gray-500">Cargando tablero...</p>;
-
-  const totalCards = data.reduce((sum, col) => sum + col.cards.length, 0);
+  const totalCards = filteredData.reduce((sum, col) => sum + col.cards.length, 0);
 
   return (
     <div>
@@ -320,29 +362,39 @@ export default function MyKanbanPage() {
         <span className="text-sm text-gray-500">{totalCards} ensayo{totalCards !== 1 ? 's' : ''} asignado{totalCards !== 1 ? 's' : ''}</span>
       </div>
 
-      {totalCards === 0 && (
+      <KanbanFilters values={filters} onChange={setFilters} hideTecnico formOptions={formOptions} />
+
+      {loading && (
+        <p className="text-gray-500 my-4">Cargando tablero...</p>
+      )}
+
+      {!loading && totalCards === 0 && (
         <p className="text-sm text-gray-500 mb-4">No tienes ensayos asignados actualmente.</p>
       )}
 
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {columnsConfig.map((col) => {
-          const column = data.find((c) => c.state === col.key);
-          return (
-            <KanbanColumn
-              key={col.key}
-              title={col.title}
-              state={col.key}
-              cards={column?.cards || []}
-              color={col.color}
-              draggable={false}
-              onDragStart={() => {}}
-              onDrop={() => {}}
-              onFormClick={handleFormClick}
-              onPdfClick={handlePdfClick}
-            />
-          );
-        })}
-      </div>
+      {!loading && (
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {columnsConfig.map((col) => {
+            const column = filteredData.find((c) => c.state === col.key);
+            return (
+              <KanbanColumn
+                key={col.key}
+                title={col.title}
+                state={col.key}
+                cards={column?.cards || []}
+                color={col.color}
+                draggable={false}
+                defaultSortField={col.key === 'pendiente' ? 'fechaProgramada' : 'createdAt'}
+                defaultSortDirection={col.key === 'pendiente' ? 'asc' : 'desc'}
+                onDragStart={() => {}}
+                onDrop={() => {}}
+                onFormClick={handleFormClick}
+                onPdfClick={handlePdfClick}
+              />
+            );
+          })}
+        </div>
+      )}
 
       {/* Loading overlay */}
       {pdfLoading && (

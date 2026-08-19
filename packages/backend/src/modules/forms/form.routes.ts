@@ -400,12 +400,13 @@ export async function formRoutes(
       }
 
       try {
-        // Manager only sees active forms
         const filters = { ...parseResult.data };
         const userRole = request.user.role;
-        if (userRole === 'manager') {
+        // Manager sees only active forms by default; showAll=true bypasses this (used by kanban filter dropdown)
+        if (userRole === 'manager' && filters.isActive === undefined && !filters.showAll) {
           filters.isActive = true;
         }
+        delete (filters as Record<string, unknown>).showAll;
 
         const result = await formService.findAll(filters);
         return reply.status(200).send(result);

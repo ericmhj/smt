@@ -17,6 +17,10 @@ export const formFiltersSchema = z.object({
     .string()
     .transform((val) => val === 'true')
     .optional(),
+  showAll: z
+    .string()
+    .transform((val) => val === 'true')
+    .optional(),
   search: z.string().optional(),
 });
 

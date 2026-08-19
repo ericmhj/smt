@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { api, apiUpload } from '@/lib/api';
 import { extractTenantSlug } from '@/lib/tenant';
 import { useAuth } from '@/contexts/AuthContext';
 import KanbanColumn from './KanbanColumn';
 import TransitionDialog from './TransitionDialog';
+import KanbanFilters, { KanbanFilterValues } from './KanbanFilters';
 import { KanbanCardData } from './KanbanCard';
 
 interface KanbanColumnData {
@@ -34,12 +35,20 @@ const columnsConfig = [
   { key: 'finalizado', title: 'Finalizado', color: '#6b7280' },
 ];
 
+const INITIAL_FILTERS: KanbanFilterValues = {
+  tecnicoId: '',
+  formId: '',
+  dateFrom: '',
+  dateTo: '',
+  clientSearch: '',
+  onlyUnread: false,
+};
+
 export default function KanbanBoard() {
   const { user } = useAuth();
   const [data, setData] = useState<KanbanColumnData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterTechnician, setFilterTechnician] = useState('');
-  const [filterForm, setFilterForm] = useState('');
+  const [filters, setFilters] = useState<KanbanFilterValues>(INITIAL_FILTERS);
 
   // Transition dialog state
   const [showTransition, setShowTransition] = useState(false);
@@ -51,12 +60,13 @@ export default function KanbanBoard() {
 
   const isManager = true; // All roles can attempt drag, backend validates permissions
 
-  const fetchKanban = async () => {
+  const fetchKanban = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filterTechnician) params.set('tecnicoId', filterTechnician);
-      if (filterForm) params.set('formId', filterForm);
+      if (filters.tecnicoId) params.set('tecnicoId', filters.tecnicoId);
+      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
+      if (filters.dateTo) params.set('dateTo', filters.dateTo);
       const token = localStorage.getItem('access_token');
       const tenantSlug = extractTenantSlug();
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/kanban?${params.toString()}`, {
@@ -73,11 +83,46 @@ export default function KanbanBoard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.tecnicoId, filters.dateFrom, filters.dateTo]);
 
   useEffect(() => {
     fetchKanban();
-  }, [filterTechnician, filterForm]);
+  }, [fetchKanban]);
+
+  // Extract unique form names from board cards for the filter dropdown
+  const formOptions = useMemo(() => {
+    const seen = new Map<string, boolean>();
+    data.forEach((col) => {
+      col.cards.forEach((card) => {
+        if (!seen.has(card.formName)) {
+          seen.set(card.formName, true);
+        }
+      });
+    });
+    return Array.from(seen.keys()).map((name) => ({ id: name, name }));
+  }, [data]);
+
+  // Client-side filtering (form name, client search, unread observations)
+  const filteredData = useMemo(() => {
+    return data.map((column) => ({
+      ...column,
+      cards: column.cards.filter((card) => {
+        // Filter by form name
+        if (filters.formId && card.formName !== filters.formId) return false;
+        // Client name search (case-insensitive partial match)
+        if (filters.clientSearch) {
+          const search = filters.clientSearch.toLowerCase();
+          const matchesClient = card.clienteNombre?.toLowerCase().includes(search);
+          const matchesForm = card.formName.toLowerCase().includes(search);
+          const matchesTecnico = card.tecnicoName.toLowerCase().includes(search);
+          if (!matchesClient && !matchesForm && !matchesTecnico) return false;
+        }
+        // Only with unread observations
+        if (filters.onlyUnread && card.unreadObservations === 0) return false;
+        return true;
+      }),
+    }));
+  }, [data, filters.formId, filters.clientSearch, filters.onlyUnread]);
 
   const handleDrop = (cardId: string, fromState: string, toState: string) => {
     // Check if transition is valid
@@ -224,8 +269,6 @@ export default function KanbanBoard() {
     setFormHtml(null);
   };
 
-  if (loading) return <p className="text-gray-500">Cargando tablero...</p>;
-
   return (
     <div>
       {transitionError && (
@@ -235,45 +278,39 @@ export default function KanbanBoard() {
         </div>
       )}
 
-      <div className="flex gap-4 mb-4">
-        <input
-          type="text"
-          placeholder="Filtrar por técnico (UUID)..."
-          value={filterTechnician}
-          onChange={(e) => setFilterTechnician(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        />
-        <input
-          type="text"
-          placeholder="Filtrar por formulario (UUID)..."
-          value={filterForm}
-          onChange={(e) => setFilterForm(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        />
-        {isManager && (
-          <p className="text-xs text-blue-600 self-center">💡 Arrastra tarjetas entre columnas para cambiar estado</p>
-        )}
-      </div>
+      <KanbanFilters values={filters} onChange={setFilters} formOptions={formOptions} />
 
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {columnsConfig.map((col) => {
-          const column = data.find((c) => c.state === col.key);
-          return (
-            <KanbanColumn
-              key={col.key}
-              title={col.title}
-              state={col.key}
-              cards={column?.cards || []}
-              color={col.color}
-              draggable={isManager}
-              onDragStart={() => {}}
-              onDrop={handleDrop}
-              onFormClick={handleFormClick}
-              onPdfClick={handlePdfClick}
-            />
+      {loading && (
+        <p className="text-gray-500 my-4">Cargando tablero...</p>
+      )}
+
+      {!loading && isManager && (
+        <p className="text-xs text-blue-600 mb-3">💡 Arrastra tarjetas entre columnas para cambiar estado</p>
+      )}
+
+      {!loading && (
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {columnsConfig.map((col) => {
+            const column = filteredData.find((c) => c.state === col.key);
+            return (
+              <KanbanColumn
+                key={col.key}
+                title={col.title}
+                state={col.key}
+                cards={column?.cards || []}
+                color={col.color}
+                draggable={isManager}
+                defaultSortField={col.key === 'pendiente' ? 'fechaProgramada' : 'createdAt'}
+                defaultSortDirection={col.key === 'pendiente' ? 'asc' : 'desc'}
+                onDragStart={() => {}}
+                onDrop={handleDrop}
+                onFormClick={handleFormClick}
+                onPdfClick={handlePdfClick}
+              />
           );
         })}
-      </div>
+        </div>
+      )}
 
       {showTransition && (
         <TransitionDialog
