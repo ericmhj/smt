@@ -1,6 +1,6 @@
 import { eq, and, lte } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import type { Database } from '../../db/index.js';
 import { getSqlClient } from '../../db/index.js';
 import { tenants } from '../../db/schema/platform.js';
@@ -8,6 +8,12 @@ import { applySchemaTemplate } from '../../db/apply-schema-template.js';
 import { getRedisClient } from '../../lib/redis.js';
 import { deleteAllWithPrefix } from '../../lib/minio.js';
 import type { KeycloakAdminClient } from '../tenant/keycloak-admin-client.js';
+
+function generateTenantHashId(slug: string): string {
+  const hash = createHash('md5').update(slug).digest('hex');
+  const num = parseInt(hash.slice(-4), 16);
+  return String(num).slice(-4).padStart(4, '0');
+}
 
 export class TenantLifecycleError extends Error {
   constructor(
@@ -148,10 +154,11 @@ export class TenantLifecycleService {
     try {
       const result = await sqlClient.begin(async (tx) => {
         // 1. Insert tenant record
+        const hashId = generateTenantHashId(dto.slug);
         const [tenantRecord] = await tx`
-          INSERT INTO public.tenants (slug, nombre, plan, status)
-          VALUES (${dto.slug}, ${dto.nombre}, ${dto.plan}, 'active')
-          RETURNING id, slug, nombre, plan, status, config, scheduled_deletion_at, created_at, updated_at
+          INSERT INTO public.tenants (hash_id, slug, nombre, plan, status)
+          VALUES (${hashId}, ${dto.slug}, ${dto.nombre}, ${dto.plan}, 'active')
+          RETURNING id, hash_id, slug, nombre, plan, status, config, scheduled_deletion_at, created_at, updated_at
         `;
 
         // 2. Create schema

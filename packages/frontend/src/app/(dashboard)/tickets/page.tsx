@@ -8,12 +8,14 @@ import { stateLabels, stateColors, stateOptions } from '@/lib/states';
 
 interface Ticket {
   id: string;
+  identificador: string;
   clienteNombre: string;
   formNombre: string;
   tecnicoNombre: string | null;
   prioridad: 'alta' | 'media' | 'baja';
   estado: string;
   fechaLimite: string | null;
+  fechaProgramada: string | null;
   createdAt: string;
 }
 
@@ -39,16 +41,39 @@ function isApproaching(fechaLimite: string | null): boolean {
   return hoursLeft <= 24;
 }
 
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export default function TicketsPage() {
   const router = useRouter();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [estado, setEstado] = useState('');
-  const [prioridad, setPrioridad] = useState('');
-  const [vencido, setVencido] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 20;
+
+  // Derived dropdown options from loaded tickets data (no extra API calls)
+  const clienteOptions = [...new Set(tickets.map((t) => t.clienteNombre).filter(Boolean))].sort();
+  const formularioOptions = [...new Set(tickets.map((t) => t.formNombre).filter(Boolean))].sort();
+  const tecnicoOptions = [...new Set(tickets.map((t) => t.tecnicoNombre).filter((n): n is string => !!n))].sort();
+
+  // Column filters
+  const [filterCliente, setFilterCliente] = useState('');
+  const [filterFormulario, setFilterFormulario] = useState('');
+  const [filterTecnico, setFilterTecnico] = useState('');
+  const [filterEstado, setFilterEstado] = useState('');
+  const [filterFechaLimiteDesde, setFilterFechaLimiteDesde] = useState('');
+  const [filterFechaLimiteHasta, setFilterFechaLimiteHasta] = useState('');
+  const [filterCreatedDesde, setFilterCreatedDesde] = useState('');
+  const [filterCreatedHasta, setFilterCreatedHasta] = useState('');
+  const [filterProgramadaDesde, setFilterProgramadaDesde] = useState('');
+  const [filterProgramadaHasta, setFilterProgramadaHasta] = useState('');
 
   const fetchTickets = useCallback(async () => {
     setLoading(true);
@@ -56,9 +81,9 @@ export default function TicketsPage() {
       const params = new URLSearchParams();
       params.set('page', String(page));
       params.set('pageSize', String(pageSize));
-      if (estado) params.set('estado', estado);
-      if (prioridad) params.set('prioridad', prioridad);
-      if (vencido) params.set('vencido', vencido);
+      if (filterEstado) params.set('estado', filterEstado);
+      if (filterCreatedDesde) params.set('fechaDesde', filterCreatedDesde);
+      if (filterCreatedHasta) params.set('fechaHasta', filterCreatedHasta);
 
       const response = await api<TicketsResponse>(`/api/tickets?${params.toString()}`);
       setTickets(response.data || []);
@@ -69,11 +94,23 @@ export default function TicketsPage() {
     } finally {
       setLoading(false);
     }
-  }, [estado, prioridad, vencido, page]);
+  }, [filterEstado, filterCreatedDesde, filterCreatedHasta, page]);
 
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
+
+  // Client-side filtering for columns not supported server-side
+  const filteredTickets = tickets.filter((t) => {
+    if (filterCliente && t.clienteNombre !== filterCliente) return false;
+    if (filterFormulario && t.formNombre !== filterFormulario) return false;
+    if (filterTecnico && (t.tecnicoNombre || '') !== filterTecnico) return false;
+    if (filterFechaLimiteDesde && t.fechaLimite && t.fechaLimite < filterFechaLimiteDesde) return false;
+    if (filterFechaLimiteHasta && t.fechaLimite && t.fechaLimite > filterFechaLimiteHasta + 'T23:59:59') return false;
+    if (filterProgramadaDesde && t.fechaProgramada && t.fechaProgramada < filterProgramadaDesde) return false;
+    if (filterProgramadaHasta && t.fechaProgramada && t.fechaProgramada > filterProgramadaHasta + 'T23:59:59') return false;
+    return true;
+  });
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -86,82 +123,189 @@ export default function TicketsPage() {
     }
   };
 
-  const estadoBadge = (e: string) => {
-    return stateColors[e] || 'bg-gray-100 text-gray-800';
+  const estadoBadge = (e: string) => stateColors[e] || 'bg-gray-100 text-gray-800';
+  const estadoLabel = (e: string) => stateLabels[e] || e;
+
+  const clearFilters = () => {
+    setFilterCliente('');
+    setFilterFormulario('');
+    setFilterTecnico('');
+    setFilterEstado('');
+    setFilterFechaLimiteDesde('');
+    setFilterFechaLimiteHasta('');
+    setFilterCreatedDesde('');
+    setFilterCreatedHasta('');
+    setFilterProgramadaDesde('');
+    setFilterProgramadaHasta('');
+    setPage(1);
   };
 
-  const estadoLabel = (e: string) => {
-    return stateLabels[e] || e;
-  };
+  const hasActiveFilters = filterCliente || filterFormulario || filterTecnico || filterEstado ||
+    filterFechaLimiteDesde || filterFechaLimiteHasta || filterCreatedDesde || filterCreatedHasta ||
+    filterProgramadaDesde || filterProgramadaHasta;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Tickets</h1>
-        <Link
-          href="/tickets/nuevo"
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
-          Nuevo ticket
-        </Link>
-      </div>
-
-      <div className="flex flex-wrap gap-4 mb-4">
-        <select
-          value={estado}
-          onChange={(e) => { setEstado(e.target.value); setPage(1); }}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        >
-          <option value="">Todos los estados</option>
-          {stateOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-        <select
-          value={prioridad}
-          onChange={(e) => { setPrioridad(e.target.value); setPage(1); }}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        >
-          <option value="">Todas las prioridades</option>
-          <option value="alta">Alta</option>
-          <option value="media">Media</option>
-          <option value="baja">Baja</option>
-        </select>
-        <select
-          value={vencido}
-          onChange={(e) => { setVencido(e.target.value); setPage(1); }}
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-        >
-          <option value="">Todos</option>
-          <option value="true">Vencidos</option>
-          <option value="false">Vigentes</option>
-        </select>
+        <div className="flex items-center gap-3">
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Limpiar filtros
+            </button>
+          )}
+          <Link
+            href="/tickets/nuevo"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+          >
+            + Nuevo ticket
+          </Link>
+        </div>
       </div>
 
       {loading ? (
-        <p className="text-gray-500">Cargando...</p>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <div className="bg-white rounded-lg shadow border border-gray-200 overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Formulario</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Técnico</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prioridad</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha Límite</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Formulario</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Técnico</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">F. Límite</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">F. Creación</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">F. Programación</th>
+              </tr>
+              {/* Filter row */}
+              <tr className="bg-gray-50/50 border-t border-gray-100">
+                <th className="px-3 py-2">
+                  {/* ID — no filter */}
+                </th>
+                <th className="px-3 py-2">
+                  <select
+                    value={filterCliente}
+                    onChange={(e) => { setFilterCliente(e.target.value); }}
+                    className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                  >
+                    <option value="">Todos</option>
+                    {clienteOptions.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </th>
+                <th className="px-3 py-2">
+                  <select
+                    value={filterFormulario}
+                    onChange={(e) => { setFilterFormulario(e.target.value); }}
+                    className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                  >
+                    <option value="">Todos</option>
+                    {formularioOptions.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </th>
+                <th className="px-3 py-2">
+                  <select
+                    value={filterTecnico}
+                    onChange={(e) => { setFilterTecnico(e.target.value); }}
+                    className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                  >
+                    <option value="">Todos</option>
+                    {tecnicoOptions.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </th>
+                <th className="px-3 py-2">
+                  {/* Prioridad — no filter needed per request */}
+                </th>
+                <th className="px-3 py-2">
+                  <select
+                    value={filterEstado}
+                    onChange={(e) => { setFilterEstado(e.target.value); setPage(1); }}
+                    className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                  >
+                    <option value="">Todos</option>
+                    {stateOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </th>
+                <th className="px-3 py-2">
+                  <div className="flex flex-col gap-1">
+                    <input
+                      type="date"
+                      value={filterFechaLimiteDesde}
+                      onChange={(e) => setFilterFechaLimiteDesde(e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                      title="Desde"
+                    />
+                    <input
+                      type="date"
+                      value={filterFechaLimiteHasta}
+                      onChange={(e) => setFilterFechaLimiteHasta(e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                      title="Hasta"
+                    />
+                  </div>
+                </th>
+                <th className="px-3 py-2">
+                  <div className="flex flex-col gap-1">
+                    <input
+                      type="date"
+                      value={filterCreatedDesde}
+                      onChange={(e) => { setFilterCreatedDesde(e.target.value); setPage(1); }}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                      title="Desde"
+                    />
+                    <input
+                      type="date"
+                      value={filterCreatedHasta}
+                      onChange={(e) => { setFilterCreatedHasta(e.target.value); setPage(1); }}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                      title="Hasta"
+                    />
+                  </div>
+                </th>
+                <th className="px-3 py-2">
+                  <div className="flex flex-col gap-1">
+                    <input
+                      type="date"
+                      value={filterProgramadaDesde}
+                      onChange={(e) => setFilterProgramadaDesde(e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                      title="Desde"
+                    />
+                    <input
+                      type="date"
+                      value={filterProgramadaHasta}
+                      onChange={(e) => setFilterProgramadaHasta(e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                      title="Hasta"
+                    />
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {tickets.length === 0 ? (
+              {filteredTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                     No se encontraron tickets
                   </td>
                 </tr>
               ) : (
-                tickets.map((ticket) => {
+                filteredTickets.map((ticket) => {
                   const isTerminal = ticket.estado === 'validado' || ticket.estado === 'rechazado' || ticket.estado === 'finalizado';
                   const overdue = isOverdue(ticket.fechaLimite) && !isTerminal;
                   const approaching = !overdue && isApproaching(ticket.fechaLimite) && !isTerminal;
@@ -169,29 +313,32 @@ export default function TicketsPage() {
                     <tr
                       key={ticket.id}
                       onClick={() => router.push(`/tickets/${ticket.id}`)}
-                      className={`hover:bg-gray-50 cursor-pointer ${overdue ? 'bg-red-50' : approaching ? 'bg-yellow-50' : ''}`}
+                      className={`hover:bg-gray-50 cursor-pointer transition-colors ${overdue ? 'bg-red-50' : approaching ? 'bg-yellow-50' : ''}`}
                     >
-                      <td className="px-4 py-3 text-sm text-gray-900">{ticket.clienteNombre}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{ticket.formNombre}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{ticket.tecnicoNombre || '—'}</td>
-                      <td className="px-4 py-3 text-sm">
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${prioridadBadge(ticket.prioridad)}`}>
+                      <td className="px-3 py-3 text-sm text-gray-500 font-mono">{ticket.identificador || '—'}</td>
+                      <td className="px-3 py-3 text-sm text-gray-900 font-medium">{ticket.clienteNombre}</td>
+                      <td className="px-3 py-3 text-sm text-gray-600">{ticket.formNombre}</td>
+                      <td className="px-3 py-3 text-sm text-gray-600">{ticket.tecnicoNombre || '—'}</td>
+                      <td className="px-3 py-3 text-sm">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${prioridadBadge(ticket.prioridad)}`}>
                           {ticket.prioridad}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm">
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${estadoBadge(ticket.estado)}`}>
+                      <td className="px-3 py-3 text-sm">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${estadoBadge(ticket.estado)}`}>
                           {estadoLabel(ticket.estado)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm">
+                      <td className="px-3 py-3 text-sm">
                         {ticket.fechaLimite ? (
                           <span className={overdue ? 'text-red-600 font-medium' : approaching ? 'text-yellow-600 font-medium' : 'text-gray-600'}>
-                            {new Date(ticket.fechaLimite).toLocaleDateString('es')}
-                            {overdue && ' (Vencido)'}
+                            {formatDate(ticket.fechaLimite)}
+                            {overdue && <span className="ml-1 text-[10px] bg-red-100 text-red-700 px-1 rounded">Vencido</span>}
                           </span>
                         ) : '—'}
                       </td>
+                      <td className="px-3 py-3 text-sm text-gray-600">{formatDate(ticket.createdAt)}</td>
+                      <td className="px-3 py-3 text-sm text-gray-600">{formatDate(ticket.fechaProgramada)}</td>
                     </tr>
                   );
                 })
@@ -210,16 +357,16 @@ export default function TicketsPage() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="px-3 py-1 text-sm border rounded-md disabled:opacity-50"
+              className="px-3 py-1 text-sm border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50"
             >
-              Anterior
+              ← Anterior
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="px-3 py-1 text-sm border rounded-md disabled:opacity-50"
+              className="px-3 py-1 text-sm border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50"
             >
-              Siguiente
+              Siguiente →
             </button>
           </div>
         </div>

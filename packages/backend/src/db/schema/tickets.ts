@@ -17,6 +17,7 @@ export const tickets = pgTable(
   'tickets',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    identificador: varchar('identificador', { length: 20 }).notNull().unique(),
     clienteId: uuid('cliente_id')
       .notNull()
       .references(() => clientes.id),

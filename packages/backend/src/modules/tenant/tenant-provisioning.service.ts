@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import type { Database } from '../../db/index.js';
 import { getSqlClient } from '../../db/index.js';
 import { tenants } from '../../db/schema/platform.js';
@@ -10,6 +10,12 @@ import type { TenantCreatedEvent } from '../kafka/kafka.events.js';
 import type { KeycloakAdminClient } from './keycloak-admin-client.js';
 
 const SCHEMA_NAME_REGEX = /^sgr_[a-z0-9][a-z0-9_-]{1,48}[a-z0-9]$/;
+
+function generateTenantHashId(slug: string): string {
+  const hash = createHash('md5').update(slug).digest('hex');
+  const num = parseInt(hash.slice(-4), 16);
+  return String(num).slice(-4).padStart(4, '0');
+}
 
 export class TenantProvisioningService {
   private db: Database;
@@ -95,9 +101,10 @@ export class TenantProvisioningService {
 
         // 3. Create tenant record in platform.tenants
         const tenantId = randomUUID();
+        const hashId = generateTenantHashId(slug);
         await tx`
-          INSERT INTO public.tenants (id, slug, nombre, status)
-          VALUES (${tenantId}, ${slug}, ${nombre}, 'active')
+          INSERT INTO public.tenants (id, hash_id, slug, nombre, status)
+          VALUES (${tenantId}, ${hashId}, ${slug}, ${nombre}, 'active')
         `;
 
         // 4. Create admin user in the tenant schema using the Keycloak UUID.

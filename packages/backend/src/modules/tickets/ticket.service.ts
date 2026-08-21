@@ -5,6 +5,7 @@ import { clientes } from '../../db/schema/clientes.js';
 import { forms, formVersions } from '../../db/schema/forms.js';
 import { users } from '../../db/schema/users.js';
 import { reactivos } from '../../db/schema/reactivos.js';
+import { tenants } from '../../db/schema/platform.js';
 import { TicketError, TicketErrorCode } from './ticket.errors.js';
 import {
   TICKET_VALID_TRANSITIONS,
@@ -140,9 +141,11 @@ export class TicketService {
     const reactivoId = reactivoResult[0]!.id;
 
     // Create the ticket
+    const identificador = await this.generateIdentificador(actor.tenantSlug);
     const result = await this.db
       .insert(tickets)
       .values({
+        identificador,
         clienteId: data.clienteId,
         formId: data.formId,
         tecnicoAsignadoId: data.tecnicoAsignadoId ?? null,
@@ -261,11 +264,13 @@ export class TicketService {
         clienteNombre: clientes.nombre,
         formNombre: forms.name,
         tecnicoNombre: users.name,
+        fechaProgramada: reactivos.fechaProgramada,
       })
       .from(tickets)
       .leftJoin(clientes, eq(tickets.clienteId, clientes.id))
       .leftJoin(forms, eq(tickets.formId, forms.id))
       .leftJoin(users, eq(tickets.tecnicoAsignadoId, users.id))
+      .leftJoin(reactivos, eq(tickets.reactivoId, reactivos.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .limit(pagination.pageSize)
       .offset(offset)
@@ -277,6 +282,7 @@ export class TicketService {
         clienteNombre: row.clienteNombre ?? undefined,
         formNombre: row.formNombre ?? undefined,
         tecnicoNombre: row.tecnicoNombre ?? undefined,
+        fechaProgramada: row.fechaProgramada ? row.fechaProgramada.toISOString() : undefined,
       })),
       total,
       page: pagination.page,
@@ -360,6 +366,7 @@ export class TicketService {
   private toResponse(row: typeof tickets.$inferSelect): TicketResponse {
     return {
       id: row.id,
+      identificador: row.identificador,
       clienteId: row.clienteId,
       formId: row.formId,
       tecnicoAsignadoId: row.tecnicoAsignadoId,
@@ -372,5 +379,39 @@ export class TicketService {
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  /**
+   * Generates a unique ticket identifier: XXXX-YYYYMMDD-NNN
+   * - XXXX: tenant hashId (stored on tenant record)
+   * - YYYYMMDD: current date
+   * - NNN: sequential counter for that tenant+date combination
+   */
+  private async generateIdentificador(tenantSlug: string): Promise<string> {
+    // Get tenant hashId from the tenants table
+    const tenantResult = await this.db
+      .select({ hashId: tenants.hashId })
+      .from(tenants)
+      .where(eq(tenants.slug, tenantSlug))
+      .limit(1);
+
+    const prefix = tenantResult[0]?.hashId || '0000';
+
+    const now = new Date();
+    const dateStr = now.getFullYear().toString() +
+      String(now.getMonth() + 1).padStart(2, '0') +
+      String(now.getDate()).padStart(2, '0');
+
+    // Count existing tickets today with same prefix
+    const pattern = `${prefix}-${dateStr}-%`;
+    const countResult = await this.db
+      .select({ total: count() })
+      .from(tickets)
+      .where(sql`${tickets.identificador} LIKE ${pattern}`);
+
+    const seq = (countResult[0]?.total ?? 0) + 1;
+    const seqStr = String(seq).padStart(3, '0');
+
+    return `${prefix}-${dateStr}-${seqStr}`;
   }
 }

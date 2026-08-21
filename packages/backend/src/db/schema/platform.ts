@@ -8,6 +8,7 @@ import {
 
 export const tenants = pgTable('tenants', {
   id: uuid('id').primaryKey().defaultRandom(),
+  hashId: varchar('hash_id', { length: 4 }).notNull().unique(),
   slug: varchar('slug', { length: 50 }).notNull().unique(),
   nombre: varchar('nombre', { length: 255 }).notNull(),
   plan: varchar('plan', { length: 50 }).notNull().default('starter'),

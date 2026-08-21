@@ -8,6 +8,7 @@ import DataTable from '@/components/ui/DataTable';
 
 interface Tenant {
   id: string;
+  hashId: string;
   slug: string;
   nombre: string;
   plan: string;
@@ -105,6 +106,10 @@ function TenantsDataTable({
   onToggleStatus: (t: Tenant) => void;
 }) {
   const columns = useMemo(() => [
+    tenantColumnHelper.accessor('hashId', {
+      header: 'ID',
+      cell: (info) => <span className="font-mono text-gray-500 text-xs">{info.getValue() || '—'}</span>,
+    }),
     tenantColumnHelper.accessor('nombre', {
       header: 'Nombre',
       cell: (info) => (

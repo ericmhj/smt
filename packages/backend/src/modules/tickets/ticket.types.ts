@@ -41,6 +41,7 @@ export interface PaginatedResult<T> {
 
 export interface TicketResponse {
   id: string;
+  identificador: string;
   clienteId: string;
   formId: string;
   tecnicoAsignadoId: string | null;
@@ -58,4 +59,5 @@ export interface TicketDetalle extends TicketResponse {
   clienteNombre?: string;
   formNombre?: string;
   tecnicoNombre?: string;
+  fechaProgramada?: string;
 }
