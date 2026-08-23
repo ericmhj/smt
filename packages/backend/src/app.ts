@@ -28,6 +28,7 @@ import { ticketRoutes } from './modules/tickets/ticket.routes.js';
 import { platformRoutes } from './modules/platform/platform.routes.js';
 import { tenantFormDetailRoutes } from './modules/platform/tenant-form-detail.routes.js';
 import { formTemplateRoutes } from './modules/form-templates/form-template.routes.js';
+import { toSchemaName } from './lib/tenant-schema.js';
 import { overrideRoutes } from './modules/validation/override.routes.js';
 import { ruleTemplateRoutes } from './modules/validation/rule-template.routes.js';
 import { calculationRuleRoutes } from './modules/calculation/calculation-rule.routes.js';
@@ -117,7 +118,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     const { slug, formId } = request.params as { slug: string; formId: string };
     const { getSqlClient } = await import('./db/index.js');
     const sqlClient = getSqlClient();
-    const schemaName = `sgr_${slug.replace(/-/g, '_')}`;
+    const schemaName = toSchemaName(slug);
     try {
       const formResult = await sqlClient.unsafe(
         `SELECT id, name, slug, is_active, current_version, template_id, form_type, created_at, updated_at FROM ${schemaName}.forms WHERE id = $1 LIMIT 1`, [formId]);
@@ -145,7 +146,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     if (!body.html) return reply.status(400).send({ message: 'html es requerido' });
     const { getSqlClient } = await import('./db/index.js');
     const sqlClient = getSqlClient();
-    const schemaName = `sgr_${slug.replace(/-/g, '_')}`;
+    const schemaName = toSchemaName(slug);
     try {
       const formResult = await sqlClient.unsafe(`SELECT id, current_version FROM ${schemaName}.forms WHERE id = $1 LIMIT 1`, [formId]);
       const form = formResult[0];
@@ -155,8 +156,13 @@ export async function buildApp(): Promise<FastifyInstance> {
         `INSERT INTO ${schemaName}.form_versions (form_id, version_number, html_content, sanitized_html, json_schema, fields_metadata, change_type, created_by) VALUES ($1, $2, $3, $3, '{}', '{}', 'update', $4)`,
         [formId, newVersion, body.html, request.user.sub]);
       const updates = [`current_version = ${newVersion}`, `updated_at = NOW()`];
-      if (body.newName) updates.push(`name = '${body.newName.replace(/'/g, "''")}'`);
-      await sqlClient.unsafe(`UPDATE ${schemaName}.forms SET ${updates.join(', ')} WHERE id = $1`, [formId]);
+      if (body.newName) updates.push(`name = $5`);
+      const params: unknown[] = [formId];
+      if (body.newName) {
+        await sqlClient.unsafe(`UPDATE ${schemaName}.forms SET current_version = $2, updated_at = NOW(), name = $3 WHERE id = $1`, [formId, newVersion, body.newName]);
+      } else {
+        await sqlClient.unsafe(`UPDATE ${schemaName}.forms SET current_version = $2, updated_at = NOW() WHERE id = $1`, [formId, newVersion]);
+      }
       return reply.send({ message: 'Formulario actualizado', newVersion });
     } catch (e: any) { return reply.status(500).send({ message: e.message }); }
   });

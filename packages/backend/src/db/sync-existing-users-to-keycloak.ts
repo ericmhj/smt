@@ -18,6 +18,7 @@
 
 import postgres from 'postgres';
 import { KeycloakAdminClient } from '../modules/tenant/keycloak-admin-client.js';
+import { toSchemaName } from '../lib/tenant-schema.js';
 
 interface TenantRow {
   slug: string;
@@ -75,8 +76,7 @@ async function main(): Promise<void> {
 
     // 2. For each tenant, read users and sync to Keycloak
     for (const tenant of tenants) {
-      const sanitizedSlug = tenant.slug.replace(/-/g, '_');
-      const schemaName = `sgr_${sanitizedSlug}`;
+      const schemaName = toSchemaName(tenant.slug);
 
       console.log(`\n[SyncKeycloak] Procesando tenant: ${tenant.slug} (schema: ${schemaName})`);
 
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
           try {
             await keycloakAdmin.createUser({
               email: user.email,
-              password: 'admin123',
+              password: user.email, // Temporary password = email; user must change on first login
               temporary: true,
               tenantSlug: tenant.slug,
               roles: [user.role],

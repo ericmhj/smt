@@ -5,6 +5,7 @@ import { getRedisClient } from '../../lib/redis.js';
 import { tenants } from '../../db/schema/platform.js';
 import { db } from '../../db/index.js';
 import { getSqlClient } from '../../db/index.js';
+import { toSchemaName, validateSlug } from '../../lib/tenant-schema.js';
 
 export interface TenantContext {
   tenantId: string;
@@ -163,6 +164,19 @@ async function tenantMiddlewarePlugin(fastify: FastifyInstance): Promise<void> {
       tenantSlug = subdomain || DEFAULT_TENANT_SLUG;
     }
 
+    // Validate slug format before any DB query
+    try {
+      validateSlug(tenantSlug);
+    } catch {
+      return reply.status(400).send({
+        statusCode: 400,
+        code: 'INVALID_TENANT_SLUG',
+        message: `El slug '${tenantSlug}' no es válido`,
+        timestamp: new Date().toISOString(),
+        requestId: request.id,
+      });
+    }
+
     // Resolve tenant from cache/DB
     const tenant = await resolveTenantCached(tenantSlug);
 
@@ -188,8 +202,7 @@ async function tenantMiddlewarePlugin(fastify: FastifyInstance): Promise<void> {
     }
 
     // Set tenant context on request
-    const sanitizedSlug = tenantSlug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(tenantSlug);
     request.tenantContext = {
       tenantId: tenant.id,
       tenantSlug,

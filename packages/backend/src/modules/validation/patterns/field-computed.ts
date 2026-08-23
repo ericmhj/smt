@@ -19,6 +19,7 @@ import type {
   FieldOverrideConfig,
   ValidationError,
 } from '../validation.types.js';
+import { safeMathEval } from '../../../lib/safe-math-eval.js';
 
 /**
  * Safely evaluates a simple arithmetic expression by replacing field
@@ -56,17 +57,11 @@ function safeEvaluateExpression(
     return NaN;
   }
 
-  try {
-    // Use Function constructor for safe math evaluation
-    // The resolved string only contains numbers and arithmetic operators at this point
-    const result = new Function(`return (${resolved});`)() as number;
-    if (typeof result !== 'number' || !isFinite(result)) {
-      return NaN;
-    }
-    return result;
-  } catch {
+  const result = safeMathEval(resolved);
+  if (isNaN(result) || !isFinite(result)) {
     return NaN;
   }
+  return result;
 }
 
 /**

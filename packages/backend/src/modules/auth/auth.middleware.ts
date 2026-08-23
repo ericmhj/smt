@@ -46,7 +46,28 @@ async function authMiddlewarePlugin(
 
     const authHeader = request.headers.authorization;
 
+    // Fallback: form session cookie (for rendered forms that use HttpOnly cookie auth)
     if (!authHeader) {
+      const { extractFormSessionFromCookie, verifyFormSessionToken } = await import('../../lib/form-session.js');
+      const cookieToken = extractFormSessionFromCookie(request.headers.cookie);
+
+      if (cookieToken) {
+        const session = await verifyFormSessionToken(cookieToken);
+        if (session) {
+          // Populate request.user with limited claims from form session
+          request.user = {
+            sub: session.sub,
+            role: 'tecnico',
+            tenantId: '',
+            tenantSlug: session.tenantSlug,
+            iat: 0,
+            exp: 0,
+            jti: 'form-session',
+          };
+          return;
+        }
+      }
+
       return reply.status(401).send({
         statusCode: 401,
         code: 'AUTH_003',

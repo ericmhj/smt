@@ -481,14 +481,24 @@ export async function formRoutes(
     { preHandler: [readRoles] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const token = request.headers.authorization?.replace('Bearer ', '') || '';
       const tenantSlug = request.user?.tenantSlug || 'default';
+      const userId = request.user?.sub || '';
       const port = (request.server.addresses()?.[0] as { port?: number })?.port || 3001;
       const apiBase = `${request.protocol}://${request.hostname}:${port}`;
+
+      // Escape values for safe embedding in JavaScript strings (prevent XSS)
+      const safeTenantSlug = JSON.stringify(tenantSlug).slice(1, -1);
+      const safeId = JSON.stringify(id).slice(1, -1);
+      const safeApiBase = JSON.stringify(apiBase).slice(1, -1);
 
       try {
         const form = await formService.findById(id);
         const htmlContent = form.currentVersionData?.htmlContent || '';
+
+        // Create scoped form session cookie (replaces JWT in HTML)
+        const { createFormSessionToken, buildFormSessionCookie } = await import('../../lib/form-session.js');
+        const sessionToken = await createFormSessionToken(userId, id, tenantSlug);
+        reply.header('Set-Cookie', buildFormSessionCookie(sessionToken));
 
         const submitScript = `
 <script>
@@ -512,7 +522,7 @@ export async function formRoutes(
       else if(el.type==='number') r[n]=el.value===''?null:Number(el.value);
       else r[n]=el.value;
     });
-    fetch('${apiBase}/api/reactivos',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer ${token}','X-Tenant-Slug':'${tenantSlug}'},body:JSON.stringify({formId:'${id}',responses:r})})
+    fetch('${safeApiBase}/api/reactivos',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','X-Tenant-Slug':'${safeTenantSlug}'},body:JSON.stringify({formId:'${safeId}',responses:r})})
     .then(function(res){if(!res.ok)return res.json().then(function(d){throw new Error(d.message||'Error')});return res.json();})
     .then(function(){
       document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;font-family:system-ui"><div style="width:64px;height:64px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;font-size:32px">\\u2713</div><h2 style="color:#166534;margin:0">Formulario enviado</h2><p style="color:#6b7280">Esta ventana se cerrara...</p></div>';

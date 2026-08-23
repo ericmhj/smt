@@ -7,6 +7,7 @@ import { KeycloakClient, type KeycloakClientConfig } from './keycloak-client.js'
 import { LicenseClient, type LicenseClientConfig } from './license-client.js';
 import { db, getSqlClient } from '../../db/index.js';
 import { tenants } from '../../db/schema/platform.js';
+import { toSchemaName } from '../../lib/tenant-schema.js';
 
 export interface IntegratedAuthConfig {
   keycloakTokenUrl: string;
@@ -180,8 +181,7 @@ export class IntegratedAuthStrategy implements AuthStrategy {
     const isPlatformAdmin = claims.roles?.includes('platform_admin');
 
     if (!isPlatformAdmin) {
-      const sanitizedSlug = tenantSlug.replace(/-/g, '_');
-      const schemaName = `sgr_${sanitizedSlug}`;
+      const schemaName = toSchemaName(tenantSlug);
       const sql = getSqlClient();
 
       try {
@@ -208,8 +208,7 @@ export class IntegratedAuthStrategy implements AuthStrategy {
     // Sync role to local DB (Keycloak is source of truth)
     // This keeps users.role updated as a local cache for operational queries.
     try {
-      const sanitizedSlug = tenantSlug.replace(/-/g, '_');
-      const schemaName = `sgr_${sanitizedSlug}`;
+      const schemaName = toSchemaName(tenantSlug);
       const sql = getSqlClient();
       await sql.unsafe(`SET search_path TO ${schemaName}, public`);
       await sql`

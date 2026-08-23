@@ -6,6 +6,7 @@ import { getSqlClient } from '../../db/index.js';
 import { tenants } from '../../db/schema/platform.js';
 import { TenantLifecycleService, TenantLifecycleError } from './tenant-lifecycle.service.js';
 import type { KeycloakAdminClient } from '../tenant/keycloak-admin-client.js';
+import { toSchemaName } from '../../lib/tenant-schema.js';
 
 /**
  * Extracts theme colors and font from form HTML.
@@ -154,8 +155,7 @@ export async function platformRoutes(
       return reply.status(400).send({ statusCode: 400, message: 'tenantSlug y formId son requeridos' });
     }
     const sqlClient = getSqlClient();
-    const sanitizedSlug = body.tenantSlug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(body.tenantSlug);
 
     try {
       const formResult = await sqlClient.unsafe(
@@ -222,8 +222,7 @@ export async function platformRoutes(
       return reply.status(400).send({ statusCode: 400, message: 'tenantSlug y formId son requeridos' });
     }
     const sqlClient = getSqlClient();
-    const sanitizedSlug = body.tenantSlug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(body.tenantSlug);
     try {
       const reactivosResult = await sqlClient.unsafe(`SELECT count(*) as cnt FROM ${schemaName}.reactivos WHERE form_id = $1`, [body.formId]);
       const reactivoCount = parseInt(reactivosResult[0]?.cnt || '0');
@@ -252,8 +251,7 @@ export async function platformRoutes(
       return reply.status(400).send({ statusCode: 400, message: 'tenantSlug, formId y isActive son requeridos' });
     }
     const sqlClient = getSqlClient();
-    const sanitizedSlug = body.tenantSlug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(body.tenantSlug);
     try {
       await sqlClient.unsafe(
         `UPDATE ${schemaName}.forms SET is_active = $1, updated_at = NOW() WHERE id = $2`,
@@ -272,8 +270,7 @@ export async function platformRoutes(
       return reply.status(400).send({ statusCode: 400, message: 'tenantSlug, formId y html son requeridos' });
     }
     const sqlClient = getSqlClient();
-    const sanitizedSlug = body.tenantSlug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(body.tenantSlug);
 
     try {
       const formResult = await sqlClient.unsafe(
@@ -417,8 +414,9 @@ export async function platformRoutes(
       data.map(async (t) => {
         let adminEmail = '';
         try {
+          const tSchemaName = toSchemaName(t.slug);
           const adminRes = await sqlClient.unsafe(
-            `SELECT email FROM sgr_${t.slug}.users WHERE role = 'admin' LIMIT 1`
+            `SELECT email FROM ${tSchemaName}.users WHERE role = 'admin' LIMIT 1`
           );
           adminEmail = adminRes[0]?.email || '';
         } catch { /* schema may not exist */ }
@@ -464,7 +462,7 @@ export async function platformRoutes(
     let adminEmail = '';
     try {
       const sqlClient = getSqlClient();
-      const schemaName = `sgr_${tenant.slug}`;
+      const schemaName = toSchemaName(tenant.slug);
       const countRes = await sqlClient.unsafe(
         `SELECT COUNT(*)::int as count FROM ${schemaName}.users`,
       );
@@ -561,7 +559,7 @@ export async function platformRoutes(
     const bcrypt = await import('bcrypt');
     const passwordHash = await bcrypt.default.hash(body.newPassword, 10);
     const sqlClient = getSqlClient();
-    const schemaName = `sgr_${tenant.slug}`;
+    const schemaName = toSchemaName(tenant.slug);
 
     await sqlClient.unsafe(
       `UPDATE ${schemaName}.users SET password_hash = $1 WHERE role = 'admin'`,
@@ -578,8 +576,7 @@ export async function platformRoutes(
     const { slug } = request.params as { slug: string };
     const { id: formId } = request.query as { id?: string };
     const sqlClient = getSqlClient();
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(slug);
 
     try {
       // If ?id= is provided, return a single form with HTML content
@@ -684,8 +681,7 @@ export async function platformRoutes(
     }
 
     const sqlClient = getSqlClient();
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(slug);
 
     // 1. Load the template
     const templateResult = await sqlClient.unsafe(
@@ -811,8 +807,7 @@ export async function platformRoutes(
     const { slug } = request.params as { slug: string };
     const body = request.body as { formId?: string; html?: string; newName?: string };
     const sqlClient = getSqlClient();
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(slug);
 
     if (!body.formId || !body.html) {
       return reply.status(400).send({
@@ -910,8 +905,7 @@ export async function platformRoutes(
   fastify.get('/api/platform/tenants/:slug/report-template-activations', async (request, reply) => {
     const { slug } = request.params as { slug: string };
     const sqlClient = getSqlClient();
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(slug);
 
     try {
       const activations = await sqlClient.unsafe(
@@ -947,8 +941,7 @@ export async function platformRoutes(
     }
 
     const sqlClient = getSqlClient();
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(slug);
 
     try {
       // Validate: only one active template per form_type (per tenant form)
@@ -1066,8 +1059,7 @@ export async function platformRoutes(
   fastify.delete('/api/platform/tenants/:slug/report-template-activations/:id', async (request, reply) => {
     const { slug, id } = request.params as { slug: string; id: string };
     const sqlClient = getSqlClient();
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(slug);
 
     try {
       const result = await sqlClient.unsafe(
@@ -1103,8 +1095,7 @@ export async function platformRoutes(
   fastify.get('/api/platform/tenants/:slug/forms/:formId/extract-theme', async (request, reply) => {
     const { slug, formId } = request.params as { slug: string; formId: string };
     const sqlClient = getSqlClient();
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(slug);
 
     try {
       // Get the form's latest version HTML
@@ -1160,8 +1151,7 @@ export async function platformRoutes(
     }
 
     const sqlClient = getSqlClient();
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(slug);
 
     try {
       const result = await sqlClient.unsafe(
@@ -1199,8 +1189,7 @@ export async function platformRoutes(
   fastify.post('/api/platform/tenants/:slug/report-template-activations/:id/auto-theme', async (request, reply) => {
     const { slug, id } = request.params as { slug: string; id: string };
     const sqlClient = getSqlClient();
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(slug);
 
     try {
       // 1. Get the activation to find the report_template_id

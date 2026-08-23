@@ -7,6 +7,7 @@
  */
 import postgres from 'postgres';
 import { KeycloakAdminClient } from '../modules/tenant/keycloak-admin-client.js';
+import { toSchemaName } from '../lib/tenant-schema.js';
 
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
@@ -28,7 +29,7 @@ async function main(): Promise<void> {
   console.log(`[SyncLocal] ${tenants.length} tenants activos`);
 
   for (const tenant of tenants) {
-    const schema = `sgr_${tenant.slug.replace(/-/g, '_')}`;
+    const schema = toSchemaName(tenant.slug);
     console.log(`\n[SyncLocal] Tenant: ${tenant.slug} (${schema})`);
 
     try {

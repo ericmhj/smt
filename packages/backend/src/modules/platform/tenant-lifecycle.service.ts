@@ -8,6 +8,7 @@ import { applySchemaTemplate } from '../../db/apply-schema-template.js';
 import { getRedisClient } from '../../lib/redis.js';
 import { deleteAllWithPrefix } from '../../lib/minio.js';
 import type { KeycloakAdminClient } from '../tenant/keycloak-admin-client.js';
+import { toSchemaName } from '../../lib/tenant-schema.js';
 
 function generateTenantHashId(slug: string): string {
   const hash = createHash('md5').update(slug).digest('hex');
@@ -111,8 +112,7 @@ export class TenantLifecycleService {
     this.validateEmailDomain(dto.adminEmail, dto.slug);
 
     const sqlClient = getSqlClient();
-    const sanitizedSlug = dto.slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(dto.slug);
 
     // Check for existing tenant with same slug
     const existing = await this.db
@@ -323,7 +323,7 @@ export class TenantLifecycleService {
 
     for (const tenant of pendingTenants) {
       try {
-        const schemaName = `sgr_${tenant.slug}`;
+        const schemaName = toSchemaName(tenant.slug);
 
         // Drop the schema
         await sqlClient.unsafe(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);

@@ -1,0 +1,23 @@
+{
+  "name": "smt-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end tests for SMT (Sistema de Muestreo Técnico)",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:login": "playwright test tests/flows/login.spec.ts",
+    "test:tickets": "playwright test tests/flows/create-ticket.spec.ts",
+    "test:kanban": "playwright test tests/flows/kanban.spec.ts",
+    "test:forms": "playwright test tests/flows/form-fill.spec.ts",
+    "test:pdf": "playwright test tests/flows/pdf-generation.spec.ts",
+    "report": "playwright show-report",
+    "install-browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "dotenv": "^16.4.0"
+  }
+}

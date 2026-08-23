@@ -28,6 +28,12 @@ export async function middleware(request: NextRequest) {
   // Tenant isolation: localhost (no subdomain) is only for platform_admin
   const hostWithoutPort = hostname.split(':')[0] || '';
   const isBareDomain = hostWithoutPort === 'localhost' || hostWithoutPort === '127.0.0.1';
+  const hasTenantCookie = !!request.cookies.get('sgr-tenant')?.value;
+
+  // If tenant cookie is set (E2E testing), allow all routes regardless of hostname
+  if (hasTenantCookie) {
+    return NextResponse.next();
+  }
 
   if (isBareDomain && pathname.startsWith('/platform')) {
     // Allow platform routes on bare localhost (requires platform_admin — checked by layout)

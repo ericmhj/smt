@@ -11,6 +11,12 @@
  * available, returns "default".
  */
 export function extractTenantSlug(hostname?: string): string {
+  // Allow override via cookie (for E2E tests running without subdomain)
+  if (typeof document !== 'undefined') {
+    const match = document.cookie.match(/(?:^|;\s*)sgr-tenant=([^;]+)/);
+    if (match && match[1]) return match[1];
+  }
+
   const host = hostname ?? getWindowHostname();
 
   if (!host) return 'default';

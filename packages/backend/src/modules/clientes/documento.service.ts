@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import type { Database } from '../../db/index.js';
 import { clienteDocumentos, clientes } from '../../db/schema/clientes.js';
 import { uploadFile, getFileUrl, deleteFile } from '../../lib/minio.js';
+import { sanitizeFilename } from '../../lib/tenant-schema.js';
 import { DocumentoError, DocumentoErrorCode } from './documento.errors.js';
 import { ClienteError, ClienteErrorCode } from './cliente.errors.js';
 import type { JWTPayload } from '../auth/auth.types.js';
@@ -70,7 +71,8 @@ export class DocumentoService {
 
     // Generate storage key
     const uuid = randomUUID();
-    const storageKey = `clientes/${clienteId}/docs/${uuid}-${file.originalName}`;
+    const safeName = sanitizeFilename(file.originalName);
+    const storageKey = `clientes/${clienteId}/docs/${uuid}-${safeName}`;
 
     // Upload to S3
     await uploadFile(storageKey, file.buffer, file.mimeType);

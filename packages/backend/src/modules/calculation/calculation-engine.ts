@@ -8,6 +8,7 @@
 
 import { eq, and } from 'drizzle-orm';
 import type { Database } from '../../db/index.js';
+import { safeMathEval } from '../../lib/safe-math-eval.js';
 import {
   calculationRuleTemplates,
   calculationRuleOverrides,
@@ -132,13 +133,9 @@ function evaluateFormula(
   // Validate safe expression
   if (!/^[\d\s+\-*/().]+$/.test(resolved)) return null;
 
-  try {
-    const result = new Function(`return (${resolved});`)() as number;
-    if (typeof result !== 'number' || !isFinite(result)) return null;
-    return precision !== undefined ? Number(result.toFixed(precision)) : result;
-  } catch {
-    return null;
-  }
+  const result = safeMathEval(resolved);
+  if (isNaN(result) || !isFinite(result)) return null;
+  return precision !== undefined ? Number(result.toFixed(precision)) : result;
 }
 
 function evaluateConditional(

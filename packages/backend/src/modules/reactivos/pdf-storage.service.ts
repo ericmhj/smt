@@ -3,6 +3,7 @@ import type { Database } from '../../db/index.js';
 import { reactivos } from '../../db/schema/reactivos.js';
 import { uploadFile, getFileUrl } from '../../lib/minio.js';
 import { PDFService } from './pdf.service.js';
+import { toSchemaName } from '../../lib/tenant-schema.js';
 
 // Plan-based download limits (hardcoded for now — Task 13.6)
 const PLAN_DOWNLOAD_LIMITS: Record<string, number> = {
@@ -25,7 +26,7 @@ export class PdfStorageService {
    * Returns the storage key.
    */
   async generateAndStore(reactivoId: string, tenantSlug: string): Promise<string> {
-    const schemaName = `sgr_${tenantSlug.replace(/-/g, '_')}`;
+    const schemaName = toSchemaName(tenantSlug);
     const pdfBuffer = await this.pdfService.generate(reactivoId, schemaName);
     const storageKey = `pdfs/${reactivoId}.pdf`;
 

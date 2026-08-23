@@ -26,6 +26,7 @@
 
 import postgres from 'postgres';
 import { KeycloakAdminClient } from '../modules/tenant/keycloak-admin-client.js';
+import { toSchemaName } from '../lib/tenant-schema.js';
 
 interface TenantRow {
   slug: string;
@@ -96,8 +97,7 @@ async function main(): Promise<void> {
 
     for (const tenant of tenants) {
       totalTenants++;
-      const sanitizedSlug = tenant.slug.replace(/-/g, '_');
-      const schemaName = `sgr_${sanitizedSlug}`;
+      const schemaName = toSchemaName(tenant.slug);
 
       console.log(`[SyncUserIds] ── Tenant: ${tenant.slug} (schema: ${schemaName})`);
 
@@ -137,13 +137,15 @@ async function main(): Promise<void> {
               // 1. Update all FK columns in all related tables
               for (const { table, column } of FK_TABLES) {
                 await tx.unsafe(
-                  `UPDATE ${table} SET ${column} = '${keycloakId}' WHERE ${column} = '${user.id}'`
+                  `UPDATE ${table} SET ${column} = $1 WHERE ${column} = $2`,
+                  [keycloakId, user.id]
                 );
               }
 
               // 2. Update the primary key last
               await tx.unsafe(
-                `UPDATE users SET id = '${keycloakId}' WHERE id = '${user.id}'`
+                `UPDATE users SET id = $1 WHERE id = $2`,
+                [keycloakId, user.id]
               );
 
               await tx.unsafe(`SET search_path TO public`);

@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getSqlClient } from '../../db/index.js';
+import { toSchemaName } from '../../lib/tenant-schema.js';
 
 /**
  * Platform routes for viewing/editing individual tenant forms.
@@ -25,8 +26,7 @@ export async function tenantFormDetailRoutes(fastify: FastifyInstance): Promise<
   fastify.get('/api/platform/tenant-form-detail/:slug/:formId', async (request, reply) => {
     const { slug, formId } = request.params as { slug: string; formId: string };
     const sqlClient = getSqlClient();
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(slug);
 
     try {
       const formResult = await sqlClient.unsafe(
@@ -84,8 +84,7 @@ export async function tenantFormDetailRoutes(fastify: FastifyInstance): Promise<
     const { slug, formId } = request.params as { slug: string; formId: string };
     const body = request.body as { html?: string; newName?: string };
     const sqlClient = getSqlClient();
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
+    const schemaName = toSchemaName(slug);
 
     if (!body.html) {
       return reply.status(400).send({
@@ -143,15 +142,17 @@ export async function tenantFormDetailRoutes(fastify: FastifyInstance): Promise<
         [formId, newVersion, body.html, creatorId],
       );
 
-      const updateParts = [`current_version = ${newVersion}`, `updated_at = NOW()`];
       if (body.newName) {
-        updateParts.push(`name = '${body.newName.replace(/'/g, "''")}'`);
+        await sqlClient.unsafe(
+          `UPDATE ${schemaName}.forms SET current_version = $2, updated_at = NOW(), name = $3 WHERE id = $1`,
+          [formId, newVersion, body.newName],
+        );
+      } else {
+        await sqlClient.unsafe(
+          `UPDATE ${schemaName}.forms SET current_version = $2, updated_at = NOW() WHERE id = $1`,
+          [formId, newVersion],
+        );
       }
-
-      await sqlClient.unsafe(
-        `UPDATE ${schemaName}.forms SET ${updateParts.join(', ')} WHERE id = $1`,
-        [formId],
-      );
 
       const updatedResult = await sqlClient.unsafe(
         `SELECT id, name, slug, is_active, current_version, updated_at FROM ${schemaName}.forms WHERE id = $1`,

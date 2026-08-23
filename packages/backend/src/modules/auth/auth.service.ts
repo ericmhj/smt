@@ -8,6 +8,7 @@ import { users } from '../../db/schema/users.js';
 import { tenants } from '../../db/schema/platform.js';
 import { getRedisClient, tenantKey } from '../../lib/redis.js';
 import { getSqlClient } from '../../db/index.js';
+import { toSchemaName } from '../../lib/tenant-schema.js';
 import type { TokenPair, LoginResponse, JWTPayload, LoginDTO } from './auth.types.js';
 import { AuthErrorCode } from './auth.types.js';
 
@@ -110,12 +111,14 @@ export class AuthService {
 
     // Use a single connection to ensure search_path applies to the user query
     const sql = getSqlClient();
-    const userRows = await sql`
-      SELECT id, email, password_hash, name, role, is_active
-      FROM sgr_${sql.unsafe(tenantSlug)}.users
-      WHERE email = ${email}
-      LIMIT 1
-    `;
+    const schemaName = toSchemaName(tenantSlug);
+    const userRows = await sql.unsafe(
+      `SELECT id, email, password_hash, name, role, is_active
+       FROM ${schemaName}.users
+       WHERE email = $1
+       LIMIT 1`,
+      [email]
+    );
 
     const user = userRows[0];
 

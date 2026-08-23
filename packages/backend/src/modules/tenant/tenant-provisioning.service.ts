@@ -8,8 +8,7 @@ import { applySchemaTemplate } from '../../db/apply-schema-template.js';
 import { getRedisClient } from '../../lib/redis.js';
 import type { TenantCreatedEvent } from '../kafka/kafka.events.js';
 import type { KeycloakAdminClient } from './keycloak-admin-client.js';
-
-const SCHEMA_NAME_REGEX = /^sgr_[a-z0-9][a-z0-9_-]{1,48}[a-z0-9]$/;
+import { toSchemaName } from '../../lib/tenant-schema.js';
 
 function generateTenantHashId(slug: string): string {
   const hash = createHash('md5').update(slug).digest('hex');
@@ -28,23 +27,7 @@ export class TenantProvisioningService {
 
   async provisionTenant(event: TenantCreatedEvent): Promise<void> {
     const { slug, nombre, admin_email } = event;
-    // Sanitize slug for PostgreSQL schema name: replace hyphens with underscores
-    const sanitizedSlug = slug.replace(/-/g, '_');
-    const schemaName = `sgr_${sanitizedSlug}`;
-
-    // Pre-validate schema name BEFORE any DB operation (prevents orphaned schemas)
-    if (!SCHEMA_NAME_REGEX.test(schemaName)) {
-      const errorMsg = `[TenantProvisioning] Schema name inválido: '${schemaName}' (slug: '${slug}'). No se ejecutará CREATE SCHEMA.`;
-      console.error(JSON.stringify({
-        level: 'error',
-        service: 'TenantProvisioning',
-        step: 'pre-validation',
-        slug,
-        schemaName,
-        message: errorMsg,
-      }));
-      throw new Error(errorMsg);
-    }
+    const schemaName = toSchemaName(slug);
 
     // Check idempotency: if tenant already exists, skip
     const existing = await this.db
@@ -70,8 +53,8 @@ export class TenantProvisioningService {
         console.log(`[TenantProvisioning] Creando usuario '${admin_email}' en Keycloak antes de la transacción DB...`);
         const kcUserId = await this.keycloakAdmin.createUser({
           email: admin_email,
-          password: 'admin123',
-          temporary: false,
+          password: admin_email, // Temporary password = email; user must change on first login
+          temporary: true,
           tenantSlug: slug,
           roles: ['admin'],
         });
@@ -109,7 +92,7 @@ export class TenantProvisioningService {
 
         // 4. Create admin user in the tenant schema using the Keycloak UUID.
         // This ensures users.id === actor.sub from JWT, preventing FK violations.
-        const hashedPassword = await bcrypt.hash('admin123', 10);
+        const hashedPassword = await bcrypt.hash(randomUUID().slice(0, 16), 10); // Random password; login via Keycloak
         await tx.unsafe(`SET search_path TO ${schemaName}, public`);
         await tx`
           INSERT INTO users (id, name, email, password_hash, role, is_active)
