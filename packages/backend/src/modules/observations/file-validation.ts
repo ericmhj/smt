@@ -68,6 +68,36 @@ export class FileValidation {
   }
 
   /**
+   * Validate file magic bytes to prevent MIME type spoofing.
+   * Checks the first few bytes of the file against known signatures.
+   */
+  static validateMagicBytes(buffer: Buffer, claimedMimeType: string): FormatValidationResult {
+    if (buffer.length < 4) {
+      return { valid: false, error: 'Archivo demasiado pequeño para ser válido' };
+    }
+
+    const magicChecks: Record<string, (buf: Buffer) => boolean> = {
+      'image/jpeg': (buf) => buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF,
+      'image/png': (buf) => buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47,
+      'application/pdf': (buf) => buf.subarray(0, 5).toString() === '%PDF-',
+      'application/msword': (buf) => buf[0] === 0xD0 && buf[1] === 0xCF && buf[2] === 0x11 && buf[3] === 0xE0,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': (buf) => buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04,
+      'application/vnd.ms-excel': (buf) => buf[0] === 0xD0 && buf[1] === 0xCF && buf[2] === 0x11 && buf[3] === 0xE0,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': (buf) => buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04,
+    };
+
+    const checker = magicChecks[claimedMimeType];
+    if (checker && !checker(buffer)) {
+      return {
+        valid: false,
+        error: `El contenido del archivo no corresponde al tipo declarado (${claimedMimeType})`,
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
    * Scan file for malware using ClamAV via TCP.
    * Fail-closed: if ClamAV is unavailable or times out, the file is rejected.
    */

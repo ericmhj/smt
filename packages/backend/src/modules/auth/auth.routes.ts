@@ -4,6 +4,31 @@ import { loginSchema, refreshSchema } from './auth.schemas.js';
 import type { AuthService } from './auth.service.js';
 import { AuthError } from './auth.service.js';
 import { resolveTenantSlug } from './tenant-resolver.js';
+import { getRedisClient } from '../../lib/redis.js';
+
+// --- Per-email rate limiting for login ---
+const LOGIN_EMAIL_MAX_ATTEMPTS = 10;
+const LOGIN_EMAIL_WINDOW_SECONDS = 900; // 15 minutes
+
+async function checkEmailRateLimit(email: string): Promise<{ allowed: boolean; retryIn: number }> {
+  const redis = getRedisClient();
+  const key = `login_attempts:${email.toLowerCase()}`;
+
+  try {
+    const current = await redis.incr(key);
+    if (current === 1) {
+      await redis.expire(key, LOGIN_EMAIL_WINDOW_SECONDS);
+    }
+    if (current > LOGIN_EMAIL_MAX_ATTEMPTS) {
+      const ttl = await redis.ttl(key);
+      return { allowed: false, retryIn: ttl > 0 ? ttl : LOGIN_EMAIL_WINDOW_SECONDS };
+    }
+    return { allowed: true, retryIn: 0 };
+  } catch {
+    // Redis failure: allow request (fail open) to not block legitimate users
+    return { allowed: true, retryIn: 0 };
+  }
+}
 
 export async function authRoutes(
   fastify: FastifyInstance,
@@ -37,6 +62,19 @@ export async function authRoutes(
 
     try {
       const tenantSlug = resolveTenantSlug(request);
+
+      // Per-email rate limiting (prevents distributed brute-force across multiple IPs)
+      const emailLimit = await checkEmailRateLimit(parseResult.data.email);
+      if (!emailLimit.allowed) {
+        return reply.status(429).send({
+          statusCode: 429,
+          code: 'RATE_LIMIT_EMAIL',
+          error: `Rate limit exceeded, retry in ${emailLimit.retryIn} seconds`,
+          message: `Demasiados intentos de login para este email. Intente en ${emailLimit.retryIn} segundos.`,
+          timestamp: new Date().toISOString(),
+          requestId: request.id,
+        });
+      }
 
       // Integrated mode: delegate to strategy's cascade login
       if (authStrategy.login) {
@@ -73,9 +111,9 @@ export async function authRoutes(
     }
   }
 
-  // POST /api/auth/login
-  fastify.post('/api/auth/login', handleLogin);
-  fastify.post('/api/v1/auth/login', handleLogin);
+  // POST /api/auth/login — with stricter per-IP rate limit (5/min)
+  fastify.post('/api/auth/login', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, handleLogin);
+  fastify.post('/api/v1/auth/login', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, handleLogin);
 
   async function handleRefresh(request: FastifyRequest, reply: FastifyReply) {
     if (!authStrategy.isLoginEnabled()) {

@@ -24,6 +24,22 @@ export async function ruleTemplateRoutes(
 ): Promise<void> {
   const { db } = opts;
 
+  const ALLOWED_ROLES = ['platform_admin', 'superusuario', 'admin'];
+
+  function requirePlatformRole(request: any, reply: any): boolean {
+    if (!request.user || !ALLOWED_ROLES.includes(request.user.role)) {
+      reply.status(403).send({
+        statusCode: 403,
+        code: 'FORBIDDEN',
+        message: 'Acceso denegado: se requiere rol de administrador de plataforma',
+        timestamp: new Date().toISOString(),
+        requestId: request.id,
+      });
+      return false;
+    }
+    return true;
+  }
+
   // GET /api/validation-rules — list all rule templates (optional filter by form_type)
   fastify.get('/api/validation-rules', async (request, reply) => {
     const { form_type } = request.query as { form_type?: string };
@@ -43,6 +59,7 @@ export async function ruleTemplateRoutes(
 
   // POST /api/validation-rules — create a new rule template
   fastify.post('/api/validation-rules', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const parseResult = createRuleTemplateSchema.safeParse(request.body);
 
     if (!parseResult.success) {
@@ -117,6 +134,7 @@ export async function ruleTemplateRoutes(
 
   // PUT /api/validation-rules/:id — update rule template
   fastify.put('/api/validation-rules/:id', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const { id } = request.params as { id: string };
 
     const parseResult = updateRuleTemplateSchema.safeParse(request.body);
@@ -176,6 +194,7 @@ export async function ruleTemplateRoutes(
 
   // DELETE /api/validation-rules/:id — delete rule template
   fastify.delete('/api/validation-rules/:id', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const { id } = request.params as { id: string };
 
     const deleted = await db
@@ -205,6 +224,7 @@ export async function ruleTemplateRoutes(
 
   // PATCH /api/validation-rules/:id/toggle — toggle is_active
   fastify.patch('/api/validation-rules/:id/toggle', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const { id } = request.params as { id: string };
 
     const [existing] = await db

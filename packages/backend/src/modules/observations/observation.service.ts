@@ -6,6 +6,7 @@ import { reactivos } from '../../db/schema/reactivos.js';
 import { ObservationError, ObservationErrorCode } from './observation.errors.js';
 import { FileValidation } from './file-validation.js';
 import { uploadFile } from '../../lib/minio.js';
+import { sanitizeFilename } from '../../lib/tenant-schema.js';
 import type {
   ObservationRecord,
   ObservationFileRecord,
@@ -74,6 +75,16 @@ export class ObservationService {
         );
       }
 
+      // Validate magic bytes (prevent MIME spoofing)
+      const magicResult = FileValidation.validateMagicBytes(file.buffer, file.mimeType);
+      if (!magicResult.valid) {
+        throw new ObservationError(
+          400,
+          ObservationErrorCode.INVALID_FORMAT,
+          magicResult.error!,
+        );
+      }
+
       // Scan for malware
       const scanResult = await FileValidation.scanForMalware(file.buffer);
       if (!scanResult.clean) {
@@ -101,7 +112,7 @@ export class ObservationService {
     const fileRecords: ObservationFileRecord[] = [];
 
     for (const file of files) {
-      const storageKey = `observations/${observation.id}/${randomUUID()}-${file.originalName}`;
+      const storageKey = `observations/${observation.id}/${randomUUID()}-${sanitizeFilename(file.originalName)}`;
 
       // Upload to MinIO
       await uploadFile(storageKey, file.buffer, file.mimeType);

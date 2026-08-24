@@ -291,6 +291,53 @@ export class TicketService {
     };
   }
 
+  /**
+   * Get distinct filter options for dropdowns (all tickets, not paginated).
+   */
+  async getFilterOptions(): Promise<{
+    clientes: Array<{ id: string; nombre: string }>;
+    tecnicos: Array<{ id: string; nombre: string }>;
+    formularios: Array<{ id: string; nombre: string }>;
+    estados: string[];
+    prioridades: string[];
+  }> {
+    // Distinct clients that have tickets
+    const clienteRows = await this.db
+      .selectDistinct({ id: clientes.id, nombre: clientes.nombre })
+      .from(tickets)
+      .innerJoin(clientes, eq(tickets.clienteId, clientes.id));
+
+    // Distinct technicians assigned to tickets
+    const tecnicoRows = await this.db
+      .selectDistinct({ id: users.id, nombre: users.name })
+      .from(tickets)
+      .innerJoin(users, eq(tickets.tecnicoAsignadoId, users.id));
+
+    // Distinct forms used in tickets
+    const formRows = await this.db
+      .selectDistinct({ id: forms.id, nombre: forms.name })
+      .from(tickets)
+      .innerJoin(forms, eq(tickets.formId, forms.id));
+
+    // Distinct estados
+    const estadoRows = await this.db
+      .selectDistinct({ estado: tickets.estado })
+      .from(tickets);
+
+    // Distinct prioridades
+    const prioridadRows = await this.db
+      .selectDistinct({ prioridad: tickets.prioridad })
+      .from(tickets);
+
+    return {
+      clientes: clienteRows.map((r) => ({ id: r.id, nombre: r.nombre })),
+      tecnicos: tecnicoRows.map((r) => ({ id: r.id, nombre: r.nombre })),
+      formularios: formRows.map((r) => ({ id: r.id, nombre: r.nombre })),
+      estados: estadoRows.map((r) => r.estado),
+      prioridades: prioridadRows.map((r) => r.prioridad),
+    };
+  }
+
   async getById(id: string): Promise<TicketDetalle | null> {
     const result = await this.db
       .select({
@@ -353,11 +400,16 @@ export class TicketService {
     }
 
     if (filters.fechaDesde) {
-      conditions.push(gte(tickets.createdAt, filters.fechaDesde));
+      // Start of day: use the date as-is at 00:00:00 local time
+      // Input is "YYYY-MM-DD", append T00:00:00 to avoid UTC midnight shift
+      const startOfDay = new Date(filters.fechaDesde.toISOString().split('T')[0] + 'T00:00:00.000Z');
+      conditions.push(gte(tickets.createdAt, startOfDay));
     }
 
     if (filters.fechaHasta) {
-      conditions.push(lte(tickets.createdAt, filters.fechaHasta));
+      // End of day: use the date at 23:59:59.999 UTC
+      const endOfDay = new Date(filters.fechaHasta.toISOString().split('T')[0] + 'T23:59:59.999Z');
+      conditions.push(lte(tickets.createdAt, endOfDay));
     }
 
     return conditions;

@@ -104,6 +104,16 @@ export async function ticketRoutes(
     },
   );
 
+  // GET /api/tickets/filters — distinct values for dropdown population
+  fastify.get(
+    '/api/tickets/filters',
+    { preHandler: [requireClientePermission('tickets:read')] },
+    async (request, reply) => {
+      const filters = await ticketService.getFilterOptions();
+      return reply.status(200).send(filters);
+    },
+  );
+
   // GET /api/tickets/:id
   fastify.get(
     '/api/tickets/:id',

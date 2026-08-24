@@ -223,6 +223,33 @@ export async function reactivoRoutes(
       }
 
       try {
+        // Ownership check: tecnico can only access form data for their own reactivos
+        const [reactivoRecord] = await opts.db
+          .select({ tecnicoId: reactivos.tecnicoId })
+          .from(reactivos)
+          .where(eq(reactivos.id, paramResult.data.id))
+          .limit(1);
+
+        if (!reactivoRecord) {
+          return reply.status(404).send({
+            statusCode: 404,
+            code: 'REACTIVO_NOT_FOUND',
+            message: 'Reactivo no encontrado',
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+
+        if (reactivoRecord.tecnicoId !== request.user.sub) {
+          return reply.status(403).send({
+            statusCode: 403,
+            code: 'AUTH_005',
+            message: 'No tienes permisos para acceder a este formulario',
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+
         const formData = await reactivoService.getFormData(paramResult.data.id);
         return reply.status(200).send(formData);
       } catch (error) {
@@ -241,6 +268,7 @@ export async function reactivoRoutes(
   );
 
   // GET /api/reactivos/:id — reactivo detail (requireRole: all authenticated)
+  // tecnico can only see their own reactivos; managers/admins can see all
   fastify.get(
     '/api/reactivos/:id',
     { preHandler: [allAuthenticated] },
@@ -259,6 +287,18 @@ export async function reactivoRoutes(
 
       try {
         const reactivo = await reactivoService.getById(paramResult.data.id);
+
+        // Ownership check: tecnico can only view their own reactivos
+        if (request.user.role === 'tecnico' && reactivo.tecnicoId !== request.user.sub) {
+          return reply.status(403).send({
+            statusCode: 403,
+            code: 'AUTH_005',
+            message: 'No tienes permisos para ver este reactivo',
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+
         return reply.status(200).send(reactivo);
       } catch (error) {
         if (error instanceof ReactivoError) {
@@ -306,6 +346,16 @@ export async function reactivoRoutes(
               requestId: request.id,
             });
           }
+          // Tecnico can only download PDF for completed reactivos
+          if (reactivo.state !== 'validado' && reactivo.state !== 'finalizado') {
+            return reply.status(400).send({
+              statusCode: 400,
+              code: 'INVALID_STATE',
+              message: 'El PDF solo está disponible para ensayos validados o finalizados',
+              timestamp: new Date().toISOString(),
+              requestId: request.id,
+            });
+          }
         }
 
         const tenantSchema = (request as any).tenantContext?.schemaName;
@@ -334,6 +384,7 @@ export async function reactivoRoutes(
   );
 
   // GET /api/reactivos/:id/chain — attempt chain (requireRole: all authenticated)
+  // tecnico can only see chain of their own reactivos
   fastify.get(
     '/api/reactivos/:id/chain',
     { preHandler: [allAuthenticated] },
@@ -351,6 +402,20 @@ export async function reactivoRoutes(
       }
 
       try {
+        // Ownership check for tecnico
+        if (request.user.role === 'tecnico') {
+          const reactivo = await reactivoService.getById(paramResult.data.id);
+          if (reactivo.tecnicoId !== request.user.sub) {
+            return reply.status(403).send({
+              statusCode: 403,
+              code: 'AUTH_005',
+              message: 'No tienes permisos para ver esta cadena de intentos',
+              timestamp: new Date().toISOString(),
+              requestId: request.id,
+            });
+          }
+        }
+
         const chain = await reactivoService.getAttemptChain(paramResult.data.id);
         return reply.status(200).send(chain);
       } catch (error) {

@@ -157,16 +157,16 @@ export class AuthService {
     // Verify refresh token signature
     const payload = await this.verifyRefreshToken(refreshToken);
 
-    // Check if refresh token exists in Redis (not revoked)
+    // Atomic check-and-delete: prevents race condition where two concurrent
+    // refresh requests could both succeed before the key is deleted.
+    // Redis DEL returns 1 if the key existed and was deleted, 0 otherwise.
     const redisKey = tenantKey(payload.tenantSlug, 'refresh', payload.sub, payload.jti);
-    const exists = await this.redis.exists(redisKey);
+    const deleted = await this.redis.del(redisKey);
 
-    if (!exists) {
+    if (deleted === 0) {
+      // Token was already consumed or revoked — potential replay attack
       throw new AuthError(401, AuthErrorCode.SESSION_REVOKED, 'Token de refresco revocado');
     }
-
-    // Delete old refresh token (rotation)
-    await this.redis.del(redisKey);
 
     // Generate new token pair carrying forward tenant claims
     return this.generateTokenPair(payload.sub, payload.role, payload.tenantId, payload.tenantSlug);

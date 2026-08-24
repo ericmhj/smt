@@ -24,6 +24,7 @@ export interface JWTPayload {
   iat: number;
   exp: number;
   jti: string;
+  formSessionScope?: string; // When set, restricts access to only this form's endpoints
 }
 
 export interface LoginDTO {

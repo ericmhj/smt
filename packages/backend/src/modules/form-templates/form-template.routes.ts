@@ -25,6 +25,23 @@ export async function formTemplateRoutes(
 ): Promise<void> {
   const service = new FormTemplateService(opts.db);
 
+  const ALLOWED_ROLES = ['platform_admin', 'superusuario', 'admin'];
+
+  // Guard: require authenticated user with platform role for write operations
+  function requirePlatformRole(request: any, reply: any): boolean {
+    if (!request.user || !ALLOWED_ROLES.includes(request.user.role)) {
+      reply.status(403).send({
+        statusCode: 403,
+        code: 'FORBIDDEN',
+        message: 'Acceso denegado: se requiere rol de administrador de plataforma',
+        timestamp: new Date().toISOString(),
+        requestId: request.id,
+      });
+      return false;
+    }
+    return true;
+  }
+
   // GET /api/form-templates — list active templates (tenant catalog)
   fastify.get('/api/form-templates', async (request, reply) => {
     const templates = await service.list();
@@ -39,6 +56,7 @@ export async function formTemplateRoutes(
 
   // POST /api/form-templates — create a new template
   fastify.post('/api/form-templates', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const parseResult = createFormTemplateSchema.safeParse(request.body);
 
     if (!parseResult.success) {
@@ -119,6 +137,7 @@ export async function formTemplateRoutes(
 
   // PUT /api/form-templates/:id — update template (new version)
   fastify.put('/api/form-templates/:id', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const paramResult = formTemplateIdParamSchema.safeParse(request.params);
 
     if (!paramResult.success) {
@@ -221,6 +240,7 @@ export async function formTemplateRoutes(
 
   // PATCH /api/form-templates/:id/toggle — activate/deactivate
   fastify.patch('/api/form-templates/:id/toggle', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const paramResult = formTemplateIdParamSchema.safeParse(request.params);
 
     if (!paramResult.success) {
@@ -263,6 +283,7 @@ export async function formTemplateRoutes(
 
   // DELETE /api/form-templates/:id — Delete a form template (only if no tenants use it)
   fastify.delete('/api/form-templates/:id', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const paramResult = formTemplateIdParamSchema.safeParse(request.params);
     if (!paramResult.success) {
       return reply.status(400).send({ statusCode: 400, code: 'VALIDATION_ERROR', message: 'ID inválido' });

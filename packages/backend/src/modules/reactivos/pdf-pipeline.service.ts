@@ -13,6 +13,10 @@ import puppeteer from 'puppeteer';
 import type { TemplateSection, PdfRenderContext } from '../report-templates/report-template.types.js';
 import { renderFormForPdf } from './pdf-form-renderer.js';
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 export interface ThemeStyles {
   primaryColor: string;
   primaryLight: string;
@@ -306,7 +310,7 @@ export class PdfPipelineService {
 <body>
   ${context.rejectionReason ? `
   <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:10px;margin-bottom:16px;">
-    <strong style="color:#dc2626;">Motivo de rechazo:</strong> ${context.rejectionReason}
+    <strong style="color:#dc2626;">Motivo de rechazo:</strong> ${escapeHtml(context.rejectionReason)}
   </div>` : ''}
 
   <!-- Sections -->
@@ -358,10 +362,10 @@ export class PdfPipelineService {
     const hasDate = config.showDate !== false;
 
     let lines = '';
-    lines += `<h1 style="font-size:22px;font-weight:700;color:var(--primary-dark);margin:0 0 8px;">${context.formName}</h1>`;
-    if (config.content) lines += `<p style="font-size:14px;color:var(--neutral);margin:0 0 12px;">${config.content}</p>`;
+    lines += `<h1 style="font-size:22px;font-weight:700;color:var(--primary-dark);margin:0 0 8px;">${escapeHtml(context.formName)}</h1>`;
+    if (config.content) lines += `<p style="font-size:14px;color:var(--neutral);margin:0 0 12px;">${escapeHtml(config.content)}</p>`;
     lines += `<div style="width:50px;height:2px;background:var(--primary);margin:14px auto;"></div>`;
-    if (hasTecnico) lines += `<p style="font-size:12px;color:var(--text);margin:4px 0;">Técnico: ${context.tecnicoName}</p>`;
+    if (hasTecnico) lines += `<p style="font-size:12px;color:var(--text);margin:4px 0;">Técnico: ${escapeHtml(context.tecnicoName)}</p>`;
     if (hasDate) lines += `<p style="font-size:12px;color:var(--text);margin:4px 0;">Fecha: ${date}</p>`;
 
     return `<div style="text-align:center;padding-top:30%;">${lines}</div><div style="page-break-after:always;"></div>`;
@@ -426,8 +430,8 @@ export class PdfPipelineService {
 
     const items = sorted.map((obs) => `
       <div class="obs-item">
-        <div class="obs-date">${new Date(obs.date).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-        <div class="obs-content">${obs.content}</div>
+        <div class="obs-date">${escapeHtml(new Date(obs.date).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }))}</div>
+        <div class="obs-content">${escapeHtml(obs.content)}</div>
       </div>
     `).join('');
 
@@ -449,9 +453,9 @@ export class PdfPipelineService {
 
     const rows = context.transitions.map((t) => `
       <tr>
-        <td>${new Date(t.date).toLocaleDateString('es-MX')}</td>
-        <td>${t.from} → ${t.to}</td>
-        <td>${t.reason || '—'}</td>
+        <td>${escapeHtml(new Date(t.date).toLocaleDateString('es-MX'))}</td>
+        <td>${escapeHtml(t.from)} → ${escapeHtml(t.to)}</td>
+        <td>${escapeHtml(t.reason || '—')}</td>
       </tr>
     `).join('');
 

@@ -13,6 +13,10 @@ import { eq } from 'drizzle-orm';
 import type { Database } from '../../db/index.js';
 import { reactivos, stateTransitions } from '../../db/schema/reactivos.js';
 import { forms, formVersions } from '../../db/schema/forms.js';
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 import { users } from '../../db/schema/users.js';
 import { observations } from '../../db/schema/observations.js';
 import { ReactivoError, ReactivoErrorCode } from './reactivo.errors.js';
@@ -260,7 +264,7 @@ export class PdfLegacyService {
     <table>
       <thead><tr><th>Fecha</th><th>Transición</th><th>Motivo</th></tr></thead>
       <tbody>
-        ${data.transitions.map(t => `<tr><td>${new Date(t.date).toLocaleDateString('es-MX')}</td><td>${t.from} → ${t.to}</td><td>${t.reason || '-'}</td></tr>`).join('')}
+        ${data.transitions.map(t => `<tr><td>${escapeHtml(new Date(t.date).toLocaleDateString('es-MX'))}</td><td>${escapeHtml(t.from)} → ${escapeHtml(t.to)}</td><td>${escapeHtml(t.reason || '-')}</td></tr>`).join('')}
       </tbody>
     </table>
   </div>` : ''}
@@ -268,7 +272,7 @@ export class PdfLegacyService {
   ${data.observations.length > 0 ? `
   <div class="pdf-section pdf-observations">
     <h2>Observaciones</h2>
-    ${data.observations.map(o => `<div class="obs-item"><small>${new Date(o.date).toLocaleDateString('es-MX')}</small><p>${o.content}</p></div>`).join('')}
+    ${data.observations.map(o => `<div class="obs-item"><small>${escapeHtml(new Date(o.date).toLocaleDateString('es-MX'))}</small><p>${escapeHtml(o.content)}</p></div>`).join('')}
   </div>` : ''}
 </body>
 </html>`;

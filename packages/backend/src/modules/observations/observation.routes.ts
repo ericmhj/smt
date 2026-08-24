@@ -107,6 +107,7 @@ export async function observationRoutes(
   );
 
   // GET /api/reactivos/:id/observations — list observations for a reactivo
+  // Managers/asistentes see all; tecnico only sees observations on their own reactivos
   fastify.get(
     '/api/reactivos/:id/observations',
     { preHandler: [allAuthenticated] },
@@ -124,6 +125,26 @@ export async function observationRoutes(
       }
 
       try {
+        // Ownership check: tecnico can only see observations on their own reactivos
+        if (request.user.role === 'tecnico') {
+          const { reactivos: reactivosTable } = await import('../../db/schema/reactivos.js');
+          const [reactivo] = await opts.db
+            .select({ tecnicoId: reactivosTable.tecnicoId })
+            .from(reactivosTable)
+            .where(eq(reactivosTable.id, paramResult.data.id))
+            .limit(1);
+
+          if (!reactivo || reactivo.tecnicoId !== request.user.sub) {
+            return reply.status(403).send({
+              statusCode: 403,
+              code: 'AUTH_005',
+              message: 'No tienes permisos para ver observaciones de este reactivo',
+              timestamp: new Date().toISOString(),
+              requestId: request.id,
+            });
+          }
+        }
+
         const observations = await observationService.getByReactivo(paramResult.data.id);
         return reply.status(200).send(observations);
       } catch (error) {
@@ -202,6 +223,7 @@ export async function observationRoutes(
   );
 
   // GET /api/observations/:id/files/:fileId — download file
+  // Managers/asistentes can download any; tecnico only for their own reactivo's observations
   fastify.get(
     '/api/observations/:id/files/:fileId',
     { preHandler: [allAuthenticated] },
@@ -235,6 +257,36 @@ export async function observationRoutes(
             timestamp: new Date().toISOString(),
             requestId: request.id,
           });
+        }
+
+        // Ownership check: tecnico can only download files from their own reactivo's observations
+        if (request.user.role === 'tecnico') {
+          const { observations: observationsTable } = await import('../../db/schema/observations.js');
+          const { reactivos: reactivosTable } = await import('../../db/schema/reactivos.js');
+
+          const [obs] = await opts.db
+            .select({ reactivoId: observationsTable.reactivoId })
+            .from(observationsTable)
+            .where(eq(observationsTable.id, paramResult.data.id))
+            .limit(1);
+
+          if (obs) {
+            const [reactivo] = await opts.db
+              .select({ tecnicoId: reactivosTable.tecnicoId })
+              .from(reactivosTable)
+              .where(eq(reactivosTable.id, obs.reactivoId))
+              .limit(1);
+
+            if (!reactivo || reactivo.tecnicoId !== request.user.sub) {
+              return reply.status(403).send({
+                statusCode: 403,
+                code: 'AUTH_005',
+                message: 'No tienes permisos para descargar este archivo',
+                timestamp: new Date().toISOString(),
+                requestId: request.id,
+              });
+            }
+          }
         }
 
         // Generate presigned URL and redirect

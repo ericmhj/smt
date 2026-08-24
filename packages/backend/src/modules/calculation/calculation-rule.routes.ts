@@ -35,6 +35,22 @@ export async function calculationRuleRoutes(
 ): Promise<void> {
   const { db } = opts;
 
+  const ALLOWED_ROLES = ['platform_admin', 'superusuario', 'admin'];
+
+  function requirePlatformRole(request: any, reply: any): boolean {
+    if (!request.user || !ALLOWED_ROLES.includes(request.user.role)) {
+      reply.status(403).send({
+        statusCode: 403,
+        code: 'FORBIDDEN',
+        message: 'Acceso denegado: se requiere rol de administrador de plataforma',
+        timestamp: new Date().toISOString(),
+        requestId: request.id,
+      });
+      return false;
+    }
+    return true;
+  }
+
   // GET /api/calculation-rules
   fastify.get('/api/calculation-rules', async (request, reply) => {
     const { form_type } = request.query as { form_type?: string };
@@ -52,6 +68,7 @@ export async function calculationRuleRoutes(
 
   // POST /api/calculation-rules
   fastify.post('/api/calculation-rules', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const parseResult = createCalcRuleSchema.safeParse(request.body);
     if (!parseResult.success) {
       return reply.status(400).send({
@@ -103,6 +120,7 @@ export async function calculationRuleRoutes(
 
   // PUT /api/calculation-rules/:id
   fastify.put('/api/calculation-rules/:id', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const { id } = request.params as { id: string };
     const parseResult = updateCalcRuleSchema.safeParse(request.body);
     if (!parseResult.success) {
@@ -127,6 +145,7 @@ export async function calculationRuleRoutes(
 
   // DELETE /api/calculation-rules/:id
   fastify.delete('/api/calculation-rules/:id', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const { id } = request.params as { id: string };
     const deletedResult = await db.delete(calculationRuleTemplates)
       .where(eq(calculationRuleTemplates.id, id))
@@ -138,6 +157,7 @@ export async function calculationRuleRoutes(
 
   // PATCH /api/calculation-rules/:id/toggle
   fastify.patch('/api/calculation-rules/:id/toggle', async (request, reply) => {
+    if (!requirePlatformRole(request, reply)) return;
     const { id } = request.params as { id: string };
     const [existing] = await db.select().from(calculationRuleTemplates)
       .where(eq(calculationRuleTemplates.id, id));

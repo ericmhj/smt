@@ -58,10 +58,18 @@ export default function TicketsPage() {
   const [total, setTotal] = useState(0);
   const pageSize = 20;
 
-  // Derived dropdown options from loaded tickets data (no extra API calls)
-  const clienteOptions = [...new Set(tickets.map((t) => t.clienteNombre).filter(Boolean))].sort();
-  const formularioOptions = [...new Set(tickets.map((t) => t.formNombre).filter(Boolean))].sort();
-  const tecnicoOptions = [...new Set(tickets.map((t) => t.tecnicoNombre).filter((n): n is string => !!n))].sort();
+  // Filter options loaded from dedicated endpoint (all tickets, not just current page)
+  const [filterOptions, setFilterOptions] = useState<{
+    clientes: Array<{ id: string; nombre: string }>;
+    tecnicos: Array<{ id: string; nombre: string }>;
+    formularios: Array<{ id: string; nombre: string }>;
+    estados: string[];
+    prioridades: string[];
+  }>({ clientes: [], tecnicos: [], formularios: [], estados: [], prioridades: [] });
+
+  const clienteOptions = filterOptions.clientes.map((c) => c.nombre).sort();
+  const formularioOptions = filterOptions.formularios.map((f) => f.nombre).sort();
+  const tecnicoOptions = filterOptions.tecnicos.map((t) => t.nombre).sort();
 
   // Column filters
   const [filterCliente, setFilterCliente] = useState('');
@@ -84,6 +92,11 @@ export default function TicketsPage() {
       if (filterEstado) params.set('estado', filterEstado);
       if (filterCreatedDesde) params.set('fechaDesde', filterCreatedDesde);
       if (filterCreatedHasta) params.set('fechaHasta', filterCreatedHasta);
+      // Server-side filters for dropdowns
+      const selectedCliente = filterOptions.clientes.find((c) => c.nombre === filterCliente);
+      if (selectedCliente) params.set('clienteId', selectedCliente.id);
+      const selectedTecnico = filterOptions.tecnicos.find((t) => t.nombre === filterTecnico);
+      if (selectedTecnico) params.set('tecnicoAsignadoId', selectedTecnico.id);
 
       const response = await api<TicketsResponse>(`/api/tickets?${params.toString()}`);
       setTickets(response.data || []);
@@ -94,21 +107,38 @@ export default function TicketsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterEstado, filterCreatedDesde, filterCreatedHasta, page]);
+  }, [filterEstado, filterCreatedDesde, filterCreatedHasta, filterCliente, filterTecnico, filterOptions, page]);
 
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
 
+  // Load filter options once on mount
+  useEffect(() => {
+    api<typeof filterOptions>('/api/tickets/filters')
+      .then(setFilterOptions)
+      .catch(() => {});
+  }, []);
+
   // Client-side filtering for columns not supported server-side
   const filteredTickets = tickets.filter((t) => {
-    if (filterCliente && t.clienteNombre !== filterCliente) return false;
     if (filterFormulario && t.formNombre !== filterFormulario) return false;
-    if (filterTecnico && (t.tecnicoNombre || '') !== filterTecnico) return false;
-    if (filterFechaLimiteDesde && t.fechaLimite && t.fechaLimite < filterFechaLimiteDesde) return false;
-    if (filterFechaLimiteHasta && t.fechaLimite && t.fechaLimite > filterFechaLimiteHasta + 'T23:59:59') return false;
-    if (filterProgramadaDesde && t.fechaProgramada && t.fechaProgramada < filterProgramadaDesde) return false;
-    if (filterProgramadaHasta && t.fechaProgramada && t.fechaProgramada > filterProgramadaHasta + 'T23:59:59') return false;
+
+    // Date filters: compare using start/end of day to avoid timezone offset issues
+    // If ticket has no date for that field, it always passes
+    if (filterFechaLimiteDesde && t.fechaLimite) {
+      if (t.fechaLimite < filterFechaLimiteDesde + 'T00:00:00') return false;
+    }
+    if (filterFechaLimiteHasta && t.fechaLimite) {
+      if (t.fechaLimite > filterFechaLimiteHasta + 'T23:59:59.999') return false;
+    }
+    if (filterProgramadaDesde && t.fechaProgramada) {
+      if (t.fechaProgramada < filterProgramadaDesde + 'T00:00:00') return false;
+    }
+    if (filterProgramadaHasta && t.fechaProgramada) {
+      if (t.fechaProgramada > filterProgramadaHasta + 'T23:59:59.999') return false;
+    }
+
     return true;
   });
 
@@ -193,7 +223,7 @@ export default function TicketsPage() {
                 <th className="px-3 py-2">
                   <select
                     value={filterCliente}
-                    onChange={(e) => { setFilterCliente(e.target.value); }}
+                    onChange={(e) => { setFilterCliente(e.target.value); setPage(1); }}
                     className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
                   >
                     <option value="">Todos</option>
@@ -217,7 +247,7 @@ export default function TicketsPage() {
                 <th className="px-3 py-2">
                   <select
                     value={filterTecnico}
-                    onChange={(e) => { setFilterTecnico(e.target.value); }}
+                    onChange={(e) => { setFilterTecnico(e.target.value); setPage(1); }}
                     className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
                   >
                     <option value="">Todos</option>

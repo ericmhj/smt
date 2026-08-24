@@ -314,14 +314,17 @@ export async function platformRoutes(
         [body.formId, newVersion, body.html, creatorId],
       );
 
-      const updateParts = [`current_version = ${newVersion}`, `updated_at = NOW()`];
       if (body.newName) {
-        updateParts.push(`name = '${body.newName.replace(/'/g, "''")}'`);
+        await sqlClient.unsafe(
+          `UPDATE ${schemaName}.forms SET current_version = $1, updated_at = NOW(), name = $2 WHERE id = $3`,
+          [newVersion, body.newName, body.formId],
+        );
+      } else {
+        await sqlClient.unsafe(
+          `UPDATE ${schemaName}.forms SET current_version = $1, updated_at = NOW() WHERE id = $2`,
+          [newVersion, body.formId],
+        );
       }
-      await sqlClient.unsafe(
-        `UPDATE ${schemaName}.forms SET ${updateParts.join(', ')} WHERE id = $1`,
-        [body.formId],
-      );
 
       return reply.status(200).send({ message: 'Formulario actualizado', newVersion });
     } catch {
@@ -872,15 +875,17 @@ export async function platformRoutes(
       );
 
       // Update form record
-      const updateFields: string[] = [`current_version = ${newVersion}`, `updated_at = NOW()`];
       if (body.newName) {
-        updateFields.push(`name = '${body.newName.replace(/'/g, "''")}'`);
+        await sqlClient.unsafe(
+          `UPDATE ${schemaName}.forms SET current_version = $1, updated_at = NOW(), name = $2 WHERE id = $3`,
+          [newVersion, body.newName, formId],
+        );
+      } else {
+        await sqlClient.unsafe(
+          `UPDATE ${schemaName}.forms SET current_version = $1, updated_at = NOW() WHERE id = $2`,
+          [newVersion, formId],
+        );
       }
-
-      await sqlClient.unsafe(
-        `UPDATE ${schemaName}.forms SET ${updateFields.join(', ')} WHERE id = $1`,
-        [formId],
-      );
 
       // Return updated form
       const updatedResult = await sqlClient.unsafe(

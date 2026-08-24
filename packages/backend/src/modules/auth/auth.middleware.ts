@@ -10,20 +10,6 @@ const PUBLIC_ROUTES: Array<{ method: string; url: string }> = [
   { method: 'POST', url: '/api/v1/auth/refresh' },
   { method: 'GET', url: '/api/health' },
   { method: 'GET', url: '/api/docs' },
-  { method: 'GET', url: '/api/form-templates' },
-  { method: 'POST', url: '/api/form-templates' },
-  { method: 'PUT', url: '/api/form-templates' },
-  { method: 'PATCH', url: '/api/form-templates' },
-  { method: 'GET', url: '/api/validation-rules' },
-  { method: 'POST', url: '/api/validation-rules' },
-  { method: 'PUT', url: '/api/validation-rules' },
-  { method: 'PATCH', url: '/api/validation-rules' },
-  { method: 'DELETE', url: '/api/validation-rules' },
-  { method: 'GET', url: '/api/calculation-rules' },
-  { method: 'POST', url: '/api/calculation-rules' },
-  { method: 'PUT', url: '/api/calculation-rules' },
-  { method: 'PATCH', url: '/api/calculation-rules' },
-  { method: 'DELETE', url: '/api/calculation-rules' },
 ];
 
 function isPublicRoute(method: string, url: string): boolean {
@@ -63,6 +49,7 @@ async function authMiddlewarePlugin(
             iat: 0,
             exp: 0,
             jti: 'form-session',
+            formSessionScope: session.formId, // Restrict access to specific form
           };
           return;
         }

@@ -19,7 +19,8 @@ export async function kanbanRoutes(
   const viewRole = requireRole(['superusuario', 'admin', 'manager', 'tecnico']);
   const managerOnly = requireRole(['manager']);
 
-  // GET /api/kanban — get board (requireRole: superusuario, admin, manager)
+  // GET /api/kanban — get board (requireRole: superusuario, admin, manager, tecnico)
+  // tecnico: only sees their own reactivos (filtered by tecnicoId automatically)
   fastify.get(
     '/api/kanban',
     { preHandler: [viewRole] },
@@ -37,7 +38,13 @@ export async function kanbanRoutes(
       }
 
       try {
-        const board = await kanbanService.getBoard(queryResult.data);
+        // Tecnico can only see their own reactivos on the board
+        const filters = { ...queryResult.data };
+        if (request.user.role === 'tecnico') {
+          filters.tecnicoId = request.user.sub;
+        }
+
+        const board = await kanbanService.getBoard(filters);
         return reply.status(200).send(board);
       } catch (error) {
         if (error instanceof KanbanError) {
@@ -108,7 +115,8 @@ export async function kanbanRoutes(
     },
   );
 
-  // GET /api/kanban/:reactivoId/detail — full detail (requireRole: superusuario, admin, manager)
+  // GET /api/kanban/:reactivoId/detail — full detail (requireRole: superusuario, admin, manager, tecnico)
+  // tecnico can only see detail of their own reactivos
   fastify.get(
     '/api/kanban/:reactivoId/detail',
     { preHandler: [viewRole] },
@@ -127,6 +135,18 @@ export async function kanbanRoutes(
 
       try {
         const detail = await kanbanService.getDetail(paramResult.data.reactivoId);
+
+        // Tecnico can only see detail of their own reactivos
+        if (request.user.role === 'tecnico' && detail.tecnicoId !== request.user.sub) {
+          return reply.status(403).send({
+            statusCode: 403,
+            code: 'AUTH_005',
+            message: 'No tienes permisos para ver este reactivo',
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+
         return reply.status(200).send(detail);
       } catch (error) {
         if (error instanceof KanbanError) {

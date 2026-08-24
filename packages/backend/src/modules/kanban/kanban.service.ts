@@ -156,6 +156,30 @@ export class KanbanService {
       );
     }
 
+    // Validate that the signature belongs to the actor performing the transition
+    const { signatures } = await import('../../db/schema/signatures.js');
+    const sigResult = await this.db
+      .select({ userId: signatures.userId })
+      .from(signatures)
+      .where(eq(signatures.id, signatureId))
+      .limit(1);
+
+    if (sigResult.length === 0) {
+      throw new KanbanError(
+        404,
+        KanbanErrorCode.INVALID_TRANSITION,
+        'Firma no encontrada',
+      );
+    }
+
+    if (sigResult[0]!.userId !== actor.sub) {
+      throw new KanbanError(
+        403,
+        KanbanErrorCode.UNAUTHORIZED_ROLE,
+        'La firma utilizada no pertenece al usuario que ejecuta la transición',
+      );
+    }
+
     // Create state_transition record
     const transitionResult = await this.db
       .insert(stateTransitions)

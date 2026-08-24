@@ -155,9 +155,6 @@ export async function buildApp(): Promise<FastifyInstance> {
       await sqlClient.unsafe(
         `INSERT INTO ${schemaName}.form_versions (form_id, version_number, html_content, sanitized_html, json_schema, fields_metadata, change_type, created_by) VALUES ($1, $2, $3, $3, '{}', '{}', 'update', $4)`,
         [formId, newVersion, body.html, request.user.sub]);
-      const updates = [`current_version = ${newVersion}`, `updated_at = NOW()`];
-      if (body.newName) updates.push(`name = $5`);
-      const params: unknown[] = [formId];
       if (body.newName) {
         await sqlClient.unsafe(`UPDATE ${schemaName}.forms SET current_version = $2, updated_at = NOW(), name = $3 WHERE id = $1`, [formId, newVersion, body.newName]);
       } else {

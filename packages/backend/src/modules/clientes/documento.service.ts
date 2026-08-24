@@ -6,6 +6,7 @@ import { uploadFile, getFileUrl, deleteFile } from '../../lib/minio.js';
 import { sanitizeFilename } from '../../lib/tenant-schema.js';
 import { DocumentoError, DocumentoErrorCode } from './documento.errors.js';
 import { ClienteError, ClienteErrorCode } from './cliente.errors.js';
+import { FileValidation } from '../observations/file-validation.js';
 import type { JWTPayload } from '../auth/auth.types.js';
 
 export interface UploadedFile {
@@ -66,6 +67,16 @@ export class DocumentoService {
         400,
         DocumentoErrorCode.INVALID_FORMAT,
         `Formato de archivo no permitido. Formatos aceptados: PDF, JPG, PNG, DOC, DOCX`,
+      );
+    }
+
+    // Scan for malware (fail-closed)
+    const scanResult = await FileValidation.scanForMalware(file.buffer);
+    if (!scanResult.clean) {
+      throw new DocumentoError(
+        400,
+        DocumentoErrorCode.INVALID_FORMAT,
+        `Archivo rechazado por seguridad: ${scanResult.threat}`,
       );
     }
 

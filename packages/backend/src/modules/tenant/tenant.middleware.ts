@@ -146,15 +146,29 @@ async function tenantMiddlewarePlugin(fastify: FastifyInstance): Promise<void> {
     }
 
     // First try: extract from JWT payload (already decoded by auth middleware)
+    // This is the TRUSTED source — the tenant the user belongs to
     if (!tenantSlug && request.user && request.user.tenantSlug) {
       tenantSlug = request.user.tenantSlug;
     }
 
-    // Second try: X-Tenant-Slug header (sent by frontend)
+    // Second try: X-Tenant-Slug header — ONLY if JWT didn't provide one
+    // SECURITY: Non-platform_admin users cannot switch tenants via header.
     if (!tenantSlug) {
       const headerSlug = request.headers['x-tenant-slug'] as string | undefined;
       if (headerSlug) {
         tenantSlug = headerSlug;
+      }
+    } else if (request.user && request.user.role !== 'platform_admin') {
+      // If JWT already provided a tenantSlug, reject mismatching X-Tenant-Slug headers
+      const headerSlug = request.headers['x-tenant-slug'] as string | undefined;
+      if (headerSlug && headerSlug !== tenantSlug && headerSlug !== 'default') {
+        return reply.status(403).send({
+          statusCode: 403,
+          code: 'TENANT_MISMATCH',
+          message: 'No tiene permisos para acceder a este tenant',
+          timestamp: new Date().toISOString(),
+          requestId: request.id,
+        });
       }
     }
 
