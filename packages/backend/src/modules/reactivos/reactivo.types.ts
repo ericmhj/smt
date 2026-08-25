@@ -74,3 +74,37 @@ export interface PaginatedResult<T> {
   pageSize: number;
   totalPages: number;
 }
+
+// ─── Estudio Complementario de Cumplimiento ────────────────────────────────
+
+export interface PuntoFueraCumplimiento {
+  puntoId: number;
+  area: string;
+  zona: string;
+  tipoPunto: 'nocturno' | 'natural';
+  criterioFallido: 'iluminancia' | 'kf' | 'ambos';
+  valorMedido: number;
+  valorLimite: number;
+  incertidumbre: number;
+}
+
+export interface CreateComplementaryStudyDTO {
+  puntosFallidos: PuntoFueraCumplimiento[];
+  tecnicoAsignadoId?: string;
+}
+
+export interface ComplementaryStudyMetadata {
+  tipo: 'complementario_cumplimiento';
+  formularioOrigenId: string;
+  informeOrigenNo: string;
+  anotacion: string;
+  puntosFallidos: PuntoFueraCumplimiento[];
+  fechaCreacion: string;
+  bloqueadoHasta: string; // ISO date — tarjeta bloqueada durante 3 días hábiles post-creación
+}
+
+export interface ComplementaryStudyResponse extends ReactivoResponse {
+  metadata: ComplementaryStudyMetadata;
+  ticketId: string;
+  ticketIdentificador: string;
+}

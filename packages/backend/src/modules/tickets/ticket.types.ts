@@ -22,8 +22,8 @@ export interface TicketFilters {
   estado?: TicketEstado;
   prioridad?: string;
   vencido?: boolean;
-  fechaDesde?: Date;
-  fechaHasta?: Date;
+  fechaDesde?: string;
+  fechaHasta?: string;
 }
 
 export interface Pagination {

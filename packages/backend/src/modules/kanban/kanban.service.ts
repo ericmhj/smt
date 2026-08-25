@@ -7,6 +7,7 @@ import { users } from '../../db/schema/users.js';
 import { observations } from '../../db/schema/observations.js';
 import { validateTransition } from '../reactivos/state-machine.js';
 import { ReactivoService } from '../reactivos/reactivo.service.js';
+import { ComplementaryStudyService } from '../reactivos/complementary-study.service.js';
 import { KanbanError, KanbanErrorCode } from './kanban.errors.js';
 import type {
   KanbanBoard,
@@ -21,10 +22,12 @@ import type { JWTPayload } from '../auth/auth.types.js';
 export class KanbanService {
   private db: Database;
   private reactivoService: ReactivoService;
+  private complementaryStudyService: ComplementaryStudyService;
 
   constructor(db: Database) {
     this.db = db;
     this.reactivoService = new ReactivoService(db);
+    this.complementaryStudyService = new ComplementaryStudyService(db);
   }
 
   /**
@@ -65,6 +68,8 @@ export class KanbanService {
         createdAt: reactivos.createdAt,
         clienteNombre: reactivos.clienteNombre,
         fechaProgramada: reactivos.fechaProgramada,
+        parentReactivoId: reactivos.parentReactivoId,
+        responses: reactivos.responses,
         unreadObservations: sql<number>`coalesce((
           select count(*)::int from observations
           where observations.reactivo_id = ${reactivos.id}
@@ -84,17 +89,42 @@ export class KanbanService {
       label: columnLabels[state],
       cards: results
         .filter((r) => r.state === state)
-        .map((r): KanbanCard => ({
-          id: r.id,
-          formName: r.formName,
-          tecnicoName: r.tecnicoName,
-          attemptNumber: r.attemptNumber,
-          state: r.state as ReactivoState,
-          createdAt: r.createdAt.toISOString(),
-          clienteNombre: r.clienteNombre || undefined,
-          fechaProgramada: r.fechaProgramada ? r.fechaProgramada.toISOString() : undefined,
-          unreadObservations: r.unreadObservations,
-        })),
+        .map((r): KanbanCard => {
+          // Check if this card is a complementary study
+          const resp = r.responses as Record<string, unknown> | null;
+          const compMeta = resp?._complementary_metadata as
+            | { tipo?: string; anotacion?: string; bloqueadoHasta?: string }
+            | undefined;
+          const isComplementary = compMeta?.tipo === 'complementario_cumplimiento';
+
+          // Check if the card is still in its lock period
+          let isBlocked = false;
+          let bloqueadoHasta: string | undefined;
+          if (isComplementary && compMeta?.bloqueadoHasta) {
+            const lockDate = new Date(compMeta.bloqueadoHasta);
+            if (new Date() < lockDate) {
+              isBlocked = true;
+              bloqueadoHasta = compMeta.bloqueadoHasta;
+            }
+          }
+
+          return {
+            id: r.id,
+            formName: r.formName,
+            tecnicoName: r.tecnicoName,
+            attemptNumber: r.attemptNumber,
+            state: r.state as ReactivoState,
+            createdAt: r.createdAt.toISOString(),
+            clienteNombre: r.clienteNombre || undefined,
+            fechaProgramada: r.fechaProgramada ? r.fechaProgramada.toISOString() : undefined,
+            unreadObservations: r.unreadObservations,
+            isComplementary,
+            parentReactivoId: r.parentReactivoId || undefined,
+            complementaryAnnotation: isComplementary ? compMeta?.anotacion : undefined,
+            isBlocked,
+            bloqueadoHasta,
+          };
+        }),
     }));
 
     return { columns };
@@ -220,6 +250,27 @@ export class KanbanService {
 
     // Hook: Sync reactivo state with associated ticket
     await this.syncTicketState(reactivoId, toState);
+
+    // Hook: Auto-create complementary compliance study when transitioning to 'finalizado'
+    if (toState === 'finalizado') {
+      try {
+        const complementary = await this.complementaryStudyService.autoCreateIfNeeded(
+          reactivoId,
+          actor,
+        );
+        if (complementary) {
+          console.log(
+            `[Kanban] Auto-created complementary study ${complementary.id} for finalized reactivo ${reactivoId}`,
+          );
+        }
+      } catch (err) {
+        // Non-critical: log and continue (don't fail the transition)
+        console.error(
+          `[Kanban] Error auto-creating complementary study for reactivo ${reactivoId}:`,
+          err,
+        );
+      }
+    }
 
     return {
       id: transition.id,

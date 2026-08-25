@@ -233,6 +233,9 @@ export default function TenantDetailPage() {
         </div>
       </div>
 
+      {/* Ticket ID Configuration */}
+      <TicketIdConfigSection tenantSlug={tenant.slug} />
+
       {/* Actions */}
       <div className="bg-white border border-gray-200 rounded-lg p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Acciones</h2>
@@ -300,6 +303,133 @@ export default function TenantDetailPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Ticket ID Configuration Section ──────────────────────────────────────────
+
+function TicketIdConfigSection({ tenantSlug }: { tenantSlug: string }) {
+  const [prefix, setPrefix] = useState('');
+  const [seqFormat, setSeqFormat] = useState('A001');
+  const [seqReset, setSeqReset] = useState('trimestral');
+  const [currentState, setCurrentState] = useState<{ letter: string; number: number; period: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    api<{ prefix: string | null; seqFormat: string; seqReset: string; currentLetter: string; currentNumber: number; currentPeriod: string }>(
+      `/api/platform/tenants/${tenantSlug}/ticket-id-config`
+    )
+      .then((data) => {
+        setPrefix(data.prefix || '');
+        setSeqFormat(data.seqFormat);
+        setSeqReset(data.seqReset);
+        setCurrentState({ letter: data.currentLetter, number: data.currentNumber, period: data.currentPeriod });
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, [tenantSlug]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage('');
+    try {
+      await api(`/api/platform/tenants/${tenantSlug}/ticket-id-config`, {
+        method: 'PUT',
+        body: JSON.stringify({ prefix: prefix.trim() || null, seqFormat, seqReset }),
+      });
+      setMessage('Configuración guardada');
+    } catch {
+      setMessage('Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Preview
+  const previewPrefix = prefix.trim() || '####';
+  const now = new Date();
+  const dateStr = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+  const previewSeq = seqFormat === '0001' ? '0001' : seqFormat === '001' ? '001' : 'A001';
+  const preview = `${previewPrefix}-${dateStr}-${previewSeq}`;
+
+  if (!loaded) return null;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-6">
+      <h2 className="text-lg font-semibold text-gray-900 mb-4">Patrón de Identificador de Tickets</h2>
+
+      {/* Preview */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+        <p className="text-xs text-blue-700">Vista previa:</p>
+        <p className="text-lg font-mono font-bold text-blue-900">{preview}</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Prefix */}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Prefijo</label>
+          <input
+            type="text"
+            value={prefix}
+            onChange={(e) => setPrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+            placeholder="hashId del tenant"
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+            maxLength={10}
+          />
+          <p className="text-[10px] text-gray-400 mt-0.5">Vacío = usar código numérico</p>
+        </div>
+
+        {/* Format */}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Formato consecutivo</label>
+          <select
+            value={seqFormat}
+            onChange={(e) => setSeqFormat(e.target.value)}
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+          >
+            <option value="A001">A001 (letra + 3 dígitos)</option>
+            <option value="001">001 (3 dígitos)</option>
+            <option value="0001">0001 (4 dígitos)</option>
+          </select>
+        </div>
+
+        {/* Reset */}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Reset</label>
+          <select
+            value={seqReset}
+            onChange={(e) => setSeqReset(e.target.value)}
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+          >
+            <option value="trimestral">Trimestral</option>
+            <option value="mensual">Mensual</option>
+            <option value="anual">Anual</option>
+            <option value="nunca">Nunca</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Current state */}
+      {currentState && currentState.period && (
+        <p className="text-xs text-gray-500 mt-3">
+          Estado actual: periodo <span className="font-mono">{currentState.period}</span>, serie <span className="font-mono">{currentState.letter}{currentState.number}</span>
+        </p>
+      )}
+
+      {/* Save */}
+      <div className="flex items-center gap-3 mt-4">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
+        >
+          {saving ? 'Guardando...' : 'Guardar'}
+        </button>
+        {message && <span className={`text-xs ${message.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>{message}</span>}
+      </div>
     </div>
   );
 }

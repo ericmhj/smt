@@ -27,6 +27,42 @@ export async function ticketRoutes(
   const ticketService = new TicketService(opts.db);
   const slaService = new SLAService(opts.db);
   const asignacionService = new AsignacionService(opts.db);
+  const { TicketIdService } = await import('./ticket-id.service.js');
+  const ticketIdService = new TicketIdService(opts.db);
+
+  // ─── Ticket ID Config ─────────────────────────────────────────────────────
+
+  // GET /api/config/ticket-id — get ticket ID configuration
+  fastify.get(
+    '/api/config/ticket-id',
+    { preHandler: [requireClientePermission('config:sla')] },
+    async (_request, reply) => {
+      const config = await ticketIdService.getConfig();
+      return reply.status(200).send(config || { prefix: null, seqFormat: 'A001', seqReset: 'trimestral', currentLetter: 'A', currentNumber: 0, currentPeriod: '' });
+    },
+  );
+
+  // PUT /api/config/ticket-id — update ticket ID configuration
+  fastify.put(
+    '/api/config/ticket-id',
+    { preHandler: [requireClientePermission('config:sla')] },
+    async (request, reply) => {
+      const body = request.body as { prefix?: string | null; seqFormat?: string; seqReset?: string };
+      const prefix = body.prefix !== undefined ? (body.prefix || null) : null;
+      const seqFormat = body.seqFormat || 'A001';
+      const seqReset = body.seqReset || 'trimestral';
+
+      if (!['A001', '001', '0001'].includes(seqFormat)) {
+        return reply.status(400).send({ message: 'seqFormat debe ser A001, 001, o 0001' });
+      }
+      if (!['trimestral', 'mensual', 'anual', 'nunca'].includes(seqReset)) {
+        return reply.status(400).send({ message: 'seqReset debe ser trimestral, mensual, anual, o nunca' });
+      }
+
+      await ticketIdService.updateConfig(prefix, seqFormat, seqReset);
+      return reply.status(200).send({ message: 'Configuración actualizada' });
+    },
+  );
 
   // ─── Tickets CRUD ─────────────────────────────────────────────────────────
 
@@ -95,8 +131,8 @@ export async function ticketRoutes(
       const { page, pageSize, fechaDesde, fechaHasta, ...rest } = queryResult.data;
       const filters = {
         ...rest,
-        fechaDesde: fechaDesde ? new Date(fechaDesde) : undefined,
-        fechaHasta: fechaHasta ? new Date(fechaHasta) : undefined,
+        fechaDesde: fechaDesde || undefined,
+        fechaHasta: fechaHasta || undefined,
       };
 
       const result = await ticketService.list(filters, { page, pageSize });

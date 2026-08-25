@@ -124,6 +124,13 @@ export class TicketService {
     // Determine tecnico ID (from ticket or default to actor)
     const tecnicoId = data.tecnicoAsignadoId || actor.sub;
 
+    // Generate ticket identifier BEFORE creating reactivo (so we can inject it as informe_no)
+    const ticketIdService = new (await import('./ticket-id.service.js')).TicketIdService(this.db);
+    const generated = await ticketIdService.generateId(actor.tenantSlug);
+
+    // Inject ticket identifier into form responses as "Informe No"
+    preFilledResponses.informe_no = generated.idVisible;
+
     // Create the reactivo (Kanban card) with pre-filled client data
     const reactivoResult = await this.db
       .insert(reactivos)
@@ -141,11 +148,10 @@ export class TicketService {
     const reactivoId = reactivoResult[0]!.id;
 
     // Create the ticket
-    const identificador = await this.generateIdentificador(actor.tenantSlug);
     const result = await this.db
       .insert(tickets)
       .values({
-        identificador,
+        identificador: generated.idVisible,
         clienteId: data.clienteId,
         formId: data.formId,
         tecnicoAsignadoId: data.tecnicoAsignadoId ?? null,
@@ -157,6 +163,9 @@ export class TicketService {
         creadoPor: actor.sub,
       })
       .returning();
+
+    // Register in the ID registry for internal tracking
+    await ticketIdService.registerInRegistry(result[0]!.id, generated);
 
     return this.toResponse(result[0]!);
   }
@@ -400,15 +409,14 @@ export class TicketService {
     }
 
     if (filters.fechaDesde) {
-      // Start of day: use the date as-is at 00:00:00 local time
-      // Input is "YYYY-MM-DD", append T00:00:00 to avoid UTC midnight shift
-      const startOfDay = new Date(filters.fechaDesde.toISOString().split('T')[0] + 'T00:00:00.000Z');
+      // "2026-08-20" → start of that day UTC: 2026-08-20T00:00:00.000Z
+      const startOfDay = new Date(filters.fechaDesde + 'T00:00:00.000Z');
       conditions.push(gte(tickets.createdAt, startOfDay));
     }
 
     if (filters.fechaHasta) {
-      // End of day: use the date at 23:59:59.999 UTC
-      const endOfDay = new Date(filters.fechaHasta.toISOString().split('T')[0] + 'T23:59:59.999Z');
+      // "2026-08-20" → end of that day UTC: 2026-08-20T23:59:59.999Z
+      const endOfDay = new Date(filters.fechaHasta + 'T23:59:59.999Z');
       conditions.push(lte(tickets.createdAt, endOfDay));
     }
 

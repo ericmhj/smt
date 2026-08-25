@@ -310,6 +310,28 @@ export class ReactivoService {
       );
     }
 
+    // 4b. Check if this is a complementary study that is still in its lock period (3 business days)
+    const existingResponses = (reactivo.responses || {}) as Record<string, unknown>;
+    const compMeta = existingResponses._complementary_metadata as
+      | { tipo?: string; bloqueadoHasta?: string }
+      | undefined;
+    if (compMeta?.tipo === 'complementario_cumplimiento' && compMeta.bloqueadoHasta) {
+      const bloqueadoHasta = new Date(compMeta.bloqueadoHasta);
+      const now = new Date();
+      if (now < bloqueadoHasta) {
+        const fechaDesbloqueo = bloqueadoHasta.toLocaleDateString('es-MX', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+        throw new ReactivoError(
+          403,
+          ReactivoErrorCode.INVALID_STATE_FOR_SUBMIT,
+          `Este estudio complementario está bloqueado hasta el ${fechaDesbloqueo}. No se puede enviar durante el periodo de bloqueo de 3 días hábiles.`,
+        );
+      }
+    }
+
     // 5. Get form_version by reactivo.formVersionId
     const versionResult = await this.db
       .select()

@@ -572,6 +572,78 @@ export async function platformRoutes(
     return reply.status(200).send({ message: 'Contraseña reseteada exitosamente' });
   });
 
+  // ─── Ticket ID Configuration per Tenant ──────────────────────────────────
+
+  // GET /api/platform/tenants/:slug/ticket-id-config
+  fastify.get('/api/platform/tenants/:slug/ticket-id-config', async (request, reply) => {
+    const { slug } = request.params as { slug: string };
+    const sqlClient = getSqlClient();
+    const schemaName = toSchemaName(slug);
+
+    try {
+      const result = await sqlClient.unsafe(
+        `SELECT prefix, seq_format, seq_reset, current_letter, current_number, current_period
+         FROM ${schemaName}.ticket_id_config LIMIT 1`,
+      );
+
+      if (result.length === 0) {
+        return reply.status(200).send({
+          prefix: null, seqFormat: 'A001', seqReset: 'trimestral',
+          currentLetter: 'A', currentNumber: 0, currentPeriod: '',
+        });
+      }
+
+      const row = result[0];
+      return reply.status(200).send({
+        prefix: row.prefix,
+        seqFormat: row.seq_format,
+        seqReset: row.seq_reset,
+        currentLetter: row.current_letter,
+        currentNumber: row.current_number,
+        currentPeriod: row.current_period,
+      });
+    } catch {
+      return reply.status(200).send({
+        prefix: null, seqFormat: 'A001', seqReset: 'trimestral',
+        currentLetter: 'A', currentNumber: 0, currentPeriod: '',
+      });
+    }
+  });
+
+  // PUT /api/platform/tenants/:slug/ticket-id-config
+  fastify.put('/api/platform/tenants/:slug/ticket-id-config', async (request, reply) => {
+    const { slug } = request.params as { slug: string };
+    const body = request.body as { prefix?: string | null; seqFormat?: string; seqReset?: string };
+    const sqlClient = getSqlClient();
+    const schemaName = toSchemaName(slug);
+
+    const prefix = body.prefix || null;
+    const seqFormat = body.seqFormat || 'A001';
+    const seqReset = body.seqReset || 'trimestral';
+
+    try {
+      const exists = await sqlClient.unsafe(`SELECT id FROM ${schemaName}.ticket_id_config LIMIT 1`);
+
+      if (exists.length > 0) {
+        await sqlClient.unsafe(
+          `UPDATE ${schemaName}.ticket_id_config SET prefix = $1, seq_format = $2, seq_reset = $3, updated_at = NOW()
+           WHERE id = (SELECT id FROM ${schemaName}.ticket_id_config LIMIT 1)`,
+          [prefix, seqFormat, seqReset],
+        );
+      } else {
+        await sqlClient.unsafe(
+          `INSERT INTO ${schemaName}.ticket_id_config (prefix, seq_format, seq_reset, current_period)
+           VALUES ($1, $2, $3, '')`,
+          [prefix, seqFormat, seqReset],
+        );
+      }
+
+      return reply.status(200).send({ message: 'Configuración actualizada' });
+    } catch (err: any) {
+      return reply.status(500).send({ message: err.message || 'Error al actualizar' });
+    }
+  });
+
   // ─── Tenant Forms Management ─────────────────────────────────────────────
 
   // GET /api/platform/tenants/:slug/forms — List forms for a specific tenant (or get one by ?id=)

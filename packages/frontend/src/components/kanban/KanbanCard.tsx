@@ -12,6 +12,11 @@ export interface KanbanCardData {
   state: string;
   clienteNombre?: string;
   fechaProgramada?: string;
+  isComplementary?: boolean;
+  parentReactivoId?: string;
+  complementaryAnnotation?: string;
+  isBlocked?: boolean;
+  bloqueadoHasta?: string;
 }
 
 interface KanbanCardProps {
@@ -60,6 +65,11 @@ export default function KanbanCard({ card, draggable, compact, onCardClick, onFo
       {!isExpanded && (
         <div className="space-y-0.5">
           <div className="flex items-center gap-2">
+            {card.isComplementary && (
+              <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded flex-shrink-0 ${card.isBlocked ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                {card.isBlocked ? '🔒' : '🔄'} Compl.
+              </span>
+            )}
             {card.unreadObservations > 0 && (
               <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 animate-pulse" />
             )}
@@ -67,7 +77,7 @@ export default function KanbanCard({ card, draggable, compact, onCardClick, onFo
           </div>
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-gray-500">👤 {card.tecnicoName}</span>
-            <span className="text-[10px] text-gray-400">{new Date(card.createdAt).toLocaleDateString('es')}</span>
+            <span className="text-[10px] text-gray-400">{new Date(card.createdAt).toLocaleDateString('es', { timeZone: 'UTC' })}</span>
           </div>
         </div>
       )}
@@ -81,6 +91,19 @@ export default function KanbanCard({ card, draggable, compact, onCardClick, onFo
               <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 mt-1 animate-pulse" />
             )}
           </div>
+          {card.isComplementary && (
+            <div className="mt-1 px-2 py-1 bg-amber-50 border border-amber-200 rounded">
+              <span className="text-[10px] font-semibold text-amber-700">🔄 Estudio Complementario de Cumplimiento</span>
+              {card.isBlocked && card.bloqueadoHasta && (
+                <p className="text-[9px] text-red-600 font-medium mt-0.5">
+                  🔒 Bloqueado hasta {new Date(card.bloqueadoHasta).toLocaleDateString('es', { timeZone: 'UTC' })}
+                </p>
+              )}
+              {card.complementaryAnnotation && (
+                <p className="text-[9px] text-amber-600 mt-0.5 line-clamp-2">{card.complementaryAnnotation}</p>
+              )}
+            </div>
+          )}
           {card.clienteNombre && (
             <p className="text-xs text-blue-600 mt-0.5 truncate">🏢 {card.clienteNombre}</p>
           )}
@@ -88,13 +111,13 @@ export default function KanbanCard({ card, draggable, compact, onCardClick, onFo
           <div className="flex items-center justify-between mt-2">
             {card.fechaProgramada ? (
               <span className="text-xs text-orange-600">
-                📅 {new Date(card.fechaProgramada).toLocaleDateString('es')}
+                📅 {new Date(card.fechaProgramada).toLocaleDateString('es', { timeZone: 'UTC' })}
               </span>
             ) : (
               <span className="text-xs text-gray-400">Intento #{card.attemptNumber}</span>
             )}
             <span className="text-xs text-gray-400">
-              {new Date(card.createdAt).toLocaleDateString('es')}
+              {new Date(card.createdAt).toLocaleDateString('es', { timeZone: 'UTC' })}
             </span>
           </div>
 

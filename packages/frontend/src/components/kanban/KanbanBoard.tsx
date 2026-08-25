@@ -6,6 +6,7 @@ import { extractTenantSlug } from '@/lib/tenant';
 import { useAuth } from '@/contexts/AuthContext';
 import KanbanColumn from './KanbanColumn';
 import TransitionDialog from './TransitionDialog';
+import ComplianceSummaryModal from './ComplianceSummaryModal';
 import KanbanFilters, { KanbanFilterValues } from './KanbanFilters';
 import { KanbanCardData } from './KanbanCard';
 
@@ -165,6 +166,9 @@ export default function KanbanBoard() {
   const [formHtml, setFormHtml] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
 
+  // Compliance summary modal state
+  const [complianceReactivoId, setComplianceReactivoId] = useState<string | null>(null);
+
   const handleFormClick = async (cardId: string) => {
     setFormLoading(true);
     try {
@@ -306,6 +310,7 @@ export default function KanbanBoard() {
                 onDrop={handleDrop}
                 onFormClick={handleFormClick}
                 onPdfClick={handlePdfClick}
+                onCardClick={col.key === 'finalizado' ? (cardId: string) => setComplianceReactivoId(cardId) : undefined}
               />
           );
         })}
@@ -375,6 +380,17 @@ export default function KanbanBoard() {
             />
           </div>
         </div>
+      )}
+
+      {/* Compliance Summary Modal */}
+      {complianceReactivoId && (
+        <ComplianceSummaryModal
+          reactivoId={complianceReactivoId}
+          onClose={() => setComplianceReactivoId(null)}
+          onStudyCreated={() => {
+            fetchKanban();
+          }}
+        />
       )}
     </div>
   );

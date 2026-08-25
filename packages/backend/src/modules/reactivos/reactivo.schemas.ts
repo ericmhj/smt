@@ -33,7 +33,26 @@ export const myReactivosQuerySchema = z.object({
     .optional(),
 });
 
+export const puntoFueraCumplimientoSchema = z.object({
+  puntoId: z.number().int().positive('puntoId debe ser un entero positivo'),
+  area: z.string().min(1, 'area es requerido'),
+  zona: z.string().min(1, 'zona es requerido'),
+  tipoPunto: z.enum(['nocturno', 'natural']),
+  criterioFallido: z.enum(['iluminancia', 'kf', 'ambos']),
+  valorMedido: z.number(),
+  valorLimite: z.number(),
+  incertidumbre: z.number(),
+});
+
+export const createComplementaryStudySchema = z.object({
+  puntosFallidos: z
+    .array(puntoFueraCumplimientoSchema)
+    .min(1, 'Debe haber al menos un punto fuera de cumplimiento'),
+  tecnicoAsignadoId: z.string().uuid('tecnicoAsignadoId debe ser UUID válido').optional(),
+});
+
 export type CreateReactivoInput = z.infer<typeof createReactivoSchema>;
 export type ReapplyReactivoInput = z.infer<typeof reapplyReactivoSchema>;
 export type ReactivoIdParam = z.infer<typeof reactivoIdParamSchema>;
 export type MyReactivosQuery = z.infer<typeof myReactivosQuerySchema>;
+export type CreateComplementaryStudyInput = z.infer<typeof createComplementaryStudySchema>;

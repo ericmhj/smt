@@ -43,10 +43,13 @@ function isApproaching(fechaLimite: string | null): boolean {
 
 function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('es-MX', {
+  // Parse as UTC and display the UTC date (avoids timezone shift showing previous day)
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('es-MX', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
+    timeZone: 'UTC',
   });
 }
 

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { ReactivoService } from './reactivo.service.js';
+import { ComplementaryStudyService } from './complementary-study.service.js';
 import { PDFService } from './pdf.service.js';
 import { ReactivoError } from './reactivo.errors.js';
 import { requireRole } from '../users/rbac.middleware.js';
@@ -10,6 +11,7 @@ import {
   submitReactivoSchema,
   reactivoIdParamSchema,
   myReactivosQuerySchema,
+  createComplementaryStudySchema,
 } from './reactivo.schemas.js';
 import type { Database } from '../../db/index.js';
 import { reactivos } from '../../db/schema/reactivos.js';
@@ -19,9 +21,11 @@ export async function reactivoRoutes(
   opts: { db: Database },
 ): Promise<void> {
   const reactivoService = new ReactivoService(opts.db);
+  const complementaryStudyService = new ComplementaryStudyService(opts.db);
   const pdfService = new PDFService(opts.db);
 
   const tecnicoRole = requireRole(['tecnico']);
+  const managerRole = requireRole(['manager', 'asistente']);
   const allAuthenticated = requireRole(['superusuario', 'admin', 'manager', 'tecnico', 'asistente']);
 
   // POST /api/reactivos — create reactivo (requireRole: tecnico)
@@ -177,7 +181,7 @@ export async function reactivoRoutes(
       try {
         // Only save draft if reactivo is in 'pendiente' state
         const [reactivo] = await opts.db
-          .select({ state: reactivos.state, tecnicoId: reactivos.tecnicoId })
+          .select({ state: reactivos.state, tecnicoId: reactivos.tecnicoId, responses: reactivos.responses })
           .from(reactivos)
           .where(eq(reactivos.id, id))
           .limit(1);
@@ -190,6 +194,20 @@ export async function reactivoRoutes(
         }
         if (reactivo.state !== 'pendiente') {
           return reply.status(400).send({ message: 'Solo se puede guardar borrador en estado pendiente' });
+        }
+
+        // Check if this is a blocked complementary study
+        const existingResp = (reactivo.responses || {}) as Record<string, unknown>;
+        const compMeta = existingResp._complementary_metadata as
+          | { tipo?: string; bloqueadoHasta?: string }
+          | undefined;
+        if (compMeta?.tipo === 'complementario_cumplimiento' && compMeta.bloqueadoHasta) {
+          const bloqueadoHasta = new Date(compMeta.bloqueadoHasta);
+          if (new Date() < bloqueadoHasta) {
+            return reply.status(403).send({
+              message: `Estudio complementario bloqueado hasta ${bloqueadoHasta.toISOString()}. No se permite edición durante el periodo de bloqueo.`,
+            });
+          }
         }
 
         // Update responses without changing state
@@ -346,16 +364,6 @@ export async function reactivoRoutes(
               requestId: request.id,
             });
           }
-          // Tecnico can only download PDF for completed reactivos
-          if (reactivo.state !== 'validado' && reactivo.state !== 'finalizado') {
-            return reply.status(400).send({
-              statusCode: 400,
-              code: 'INVALID_STATE',
-              message: 'El PDF solo está disponible para ensayos validados o finalizados',
-              timestamp: new Date().toISOString(),
-              requestId: request.id,
-            });
-          }
         }
 
         const tenantSchema = (request as any).tenantContext?.schemaName;
@@ -457,6 +465,136 @@ export async function reactivoRoutes(
           state: queryResult.data.state,
         });
         return reply.status(200).send(result);
+      } catch (error) {
+        if (error instanceof ReactivoError) {
+          return reply.status(error.statusCode).send({
+            statusCode: error.statusCode,
+            code: error.code,
+            message: error.message,
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+        throw error;
+      }
+    },
+  );
+}
+
+  // GET /api/my-reactivos — technician's reactivos (requireRole: tecnico)
+  fastify.get(
+    '/api/my-reactivos',
+    { preHandler: [tecnicoRole] },
+    async (request, reply) => {
+      const queryResult = myReactivosQuerySchema.safeParse(request.query);
+      if (!queryResult.success) {
+        return reply.status(400).send({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Parámetros de consulta inválidos',
+          details: queryResult.error.flatten().fieldErrors,
+          timestamp: new Date().toISOString(),
+          requestId: request.id,
+        });
+      }
+
+      try {
+        const result = await reactivoService.getByTecnico(request.user.sub, {
+          page: queryResult.data.page,
+          pageSize: queryResult.data.pageSize,
+          state: queryResult.data.state,
+        });
+        return reply.status(200).send(result);
+      } catch (error) {
+        if (error instanceof ReactivoError) {
+          return reply.status(error.statusCode).send({
+            statusCode: error.statusCode,
+            code: error.code,
+            message: error.message,
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // ─── Estudio Complementario de Cumplimiento ────────────────────────────────
+
+  // GET /api/reactivos/:id/compliance-summary — get compliance summary for a finalized study
+  // Only managers/asistentes can request compliance summary
+  fastify.get(
+    '/api/reactivos/:id/compliance-summary',
+    { preHandler: [managerRole] },
+    async (request, reply) => {
+      const paramResult = reactivoIdParamSchema.safeParse(request.params);
+      if (!paramResult.success) {
+        return reply.status(400).send({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Parámetro inválido',
+          details: paramResult.error.flatten().fieldErrors,
+          timestamp: new Date().toISOString(),
+          requestId: request.id,
+        });
+      }
+
+      try {
+        const summary = await complementaryStudyService.getComplianceSummary(paramResult.data.id);
+        return reply.status(200).send(summary);
+      } catch (error) {
+        if (error instanceof ReactivoError) {
+          return reply.status(error.statusCode).send({
+            statusCode: error.statusCode,
+            code: error.code,
+            message: error.message,
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // POST /api/reactivos/:id/complementario-cumplimiento — create complementary compliance study
+  // Only managers/asistentes can create complementary studies
+  fastify.post(
+    '/api/reactivos/:id/complementario-cumplimiento',
+    { preHandler: [managerRole] },
+    async (request, reply) => {
+      const paramResult = reactivoIdParamSchema.safeParse(request.params);
+      if (!paramResult.success) {
+        return reply.status(400).send({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Parámetro inválido',
+          details: paramResult.error.flatten().fieldErrors,
+          timestamp: new Date().toISOString(),
+          requestId: request.id,
+        });
+      }
+
+      const bodyResult = createComplementaryStudySchema.safeParse(request.body);
+      if (!bodyResult.success) {
+        return reply.status(400).send({
+          statusCode: 400,
+          code: 'VALIDATION_ERROR',
+          message: 'Datos de entrada inválidos',
+          details: bodyResult.error.flatten().fieldErrors,
+          timestamp: new Date().toISOString(),
+          requestId: request.id,
+        });
+      }
+
+      try {
+        const result = await complementaryStudyService.createComplementaryStudy(
+          paramResult.data.id,
+          bodyResult.data,
+          request.user,
+        );
+        return reply.status(201).send(result);
       } catch (error) {
         if (error instanceof ReactivoError) {
           return reply.status(error.statusCode).send({

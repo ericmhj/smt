@@ -10,6 +10,11 @@ export interface KanbanCard {
   clienteNombre?: string;
   fechaProgramada?: string;
   unreadObservations: number;
+  isComplementary?: boolean;
+  parentReactivoId?: string;
+  complementaryAnnotation?: string;
+  isBlocked?: boolean;
+  bloqueadoHasta?: string;
 }
 
 export interface KanbanColumn {
