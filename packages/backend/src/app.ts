@@ -25,6 +25,7 @@ import { auditRoutes } from './modules/audit/audit.routes.js';
 import { clienteRoutes } from './modules/clientes/cliente.routes.js';
 import { documentoRoutes } from './modules/clientes/documento.routes.js';
 import { ticketRoutes } from './modules/tickets/ticket.routes.js';
+import { consumptionRoutes } from './modules/consumption/consumption.routes.js';
 import { platformRoutes } from './modules/platform/platform.routes.js';
 import { tenantFormDetailRoutes } from './modules/platform/tenant-form-detail.routes.js';
 import { formTemplateRoutes } from './modules/form-templates/form-template.routes.js';
@@ -217,6 +218,9 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Register ticket routes
   await app.register(ticketRoutes, { db });
+
+  // Register consumption routes (read-only account balance & history)
+  await app.register(consumptionRoutes, { db });
 
   return app;
 }

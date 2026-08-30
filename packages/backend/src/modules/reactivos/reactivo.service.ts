@@ -132,6 +132,19 @@ export class ReactivoService {
       );
     }
 
+    // Flujo B: formulario llenado directo desde "Mis formularios".
+    // Si no trae número de informe (no viene de un ticket), se genera uno nuevo
+    // con la misma secuencia que los tickets, para mantener la numeración única.
+    const finalResponses: Record<string, unknown> = { ...responses };
+    let generatedInforme: { idVisible: string; idInterno: string; periodo: string; consecutivo: number } | null = null;
+    // El campo real de la plantilla HTML es "informe_numero".
+    if (!finalResponses.informe_numero) {
+      const { TicketIdService } = await import('../tickets/ticket-id.service.js');
+      const ticketIdService = new TicketIdService(this.db);
+      generatedInforme = await ticketIdService.generateId(actor.tenantSlug);
+      finalResponses.informe_numero = generatedInforme.idVisible;
+    }
+
     // Create reactivo with state='pendiente', attempt_number=1
     const result = await this.db
       .insert(reactivos)
@@ -141,11 +154,16 @@ export class ReactivoService {
         tecnicoId: actor.sub,
         attemptNumber: 1,
         state: 'pendiente',
-        responses,
+        responses: finalResponses,
       })
       .returning();
 
     const reactivo = result[0]!;
+
+    // Nota: en flujo B no existe un ticket asociado, por lo que NO se registra en
+    // ticket_id_registry (esa tabla exige FK a tickets). La unicidad de la
+    // numeración ya queda garantizada porque generateId() avanza el contador en
+    // ticket_id_config. El número queda persistido en responses.informe_no.
 
     return toReactivoResponse(reactivo);
   }

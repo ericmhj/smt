@@ -91,7 +91,9 @@ export default function MyKanbanPage() {
       const result = await api<KanbanResponse>(`/api/kanban?${params.toString()}`);
       setData(result.columns || []);
     } catch {
-      setData([]);
+      // No vaciar el board ante un error puntual: conservar lo mostrado para que
+      // las opciones de filtro (derivadas de las tarjetas) no desaparezcan.
+      setData((prev) => (prev.length > 0 ? prev : []));
     } finally {
       setLoading(false);
     }
@@ -113,6 +115,15 @@ export default function MyKanbanPage() {
       });
     });
     return Array.from(seen.keys()).map((name) => ({ id: name, name }));
+  }, [data]);
+
+  // Unique client names from board cards for the client filter dropdown
+  const clienteOptions = useMemo(() => {
+    const seen = new Set<string>();
+    data.forEach((col) => col.cards.forEach((card) => {
+      if (card.clienteNombre) seen.add(card.clienteNombre);
+    }));
+    return Array.from(seen).sort();
   }, [data]);
 
   // Client-side filtering (form name, search + unread)
@@ -362,7 +373,7 @@ export default function MyKanbanPage() {
         <span className="text-sm text-gray-500">{totalCards} ensayo{totalCards !== 1 ? 's' : ''} asignado{totalCards !== 1 ? 's' : ''}</span>
       </div>
 
-      <KanbanFilters values={filters} onChange={setFilters} hideTecnico formOptions={formOptions} />
+      <KanbanFilters values={filters} onChange={setFilters} hideTecnico formOptions={formOptions} clienteOptions={clienteOptions} />
 
       {loading && (
         <p className="text-gray-500 my-4">Cargando tablero...</p>

@@ -481,6 +481,7 @@ export async function formRoutes(
     { preHandler: [readRoles] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
+      const { informeNo } = request.query as { informeNo?: string };
       const tenantSlug = request.user?.tenantSlug || 'default';
       const userId = request.user?.sub || '';
       const port = (request.server.addresses()?.[0] as { port?: number })?.port || 3001;
@@ -490,6 +491,11 @@ export async function formRoutes(
       const safeTenantSlug = JSON.stringify(tenantSlug).slice(1, -1);
       const safeId = JSON.stringify(id).slice(1, -1);
       const safeApiBase = JSON.stringify(apiBase).slice(1, -1);
+
+      // Sanitiza el número de informe para inyección segura en HTML
+      const escapeHtmlAttr = (s: string) =>
+        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const informeNoSafe = informeNo ? escapeHtmlAttr(String(informeNo)) : '';
 
       try {
         const form = await formService.findById(id);
@@ -534,6 +540,19 @@ export async function formRoutes(
 <\/script>`;
 
         let fullHtml = htmlContent;
+
+        // Si viene el número de informe, pre-rellenar el input existente
+        // name="informe_numero" de la plantilla (no se inyecta un bloque nuevo).
+        if (informeNoSafe) {
+          const inputRegex = /(<input[^>]*name=["']informe_numero["'][^>]*?)(\/?>)/i;
+          if (inputRegex.test(fullHtml)) {
+            fullHtml = fullHtml.replace(inputRegex, (_m, before, close) => {
+              const cleaned = before.replace(/\s+value=["'][^"']*["']/i, '');
+              return `${cleaned} value="${informeNoSafe}"${close}`;
+            });
+          }
+        }
+
         if (fullHtml.includes('</body>')) {
           fullHtml = fullHtml.replace('</body>', submitScript + '\n</body>');
         } else {

@@ -36,6 +36,9 @@ export function TecnicoSessionGuard({ children }: { children: React.ReactNode })
           'Content-Type': 'application/json',
           'X-Tenant-Slug': tenantSlug,
         },
+        // Fastify rechaza body vacío con Content-Type JSON (FST_ERR_CTP_EMPTY_JSON_BODY),
+        // por eso se envía un objeto vacío.
+        body: '{}',
       }).catch(() => {
         // Best effort — token will expire server-side anyway
       });

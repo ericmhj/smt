@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 export interface KanbanCardData {
   id: string;
+  identificador?: string;
   tecnicoName: string;
   formName: string;
   attemptNumber: number;
@@ -64,6 +65,9 @@ export default function KanbanCard({ card, draggable, compact, onCardClick, onFo
       {/* Compact collapsed: two lines with more info */}
       {!isExpanded && (
         <div className="space-y-0.5">
+          {card.identificador && (
+            <p className="text-[10px] font-mono font-semibold text-indigo-700 truncate">#{card.identificador}</p>
+          )}
           <div className="flex items-center gap-2">
             {card.isComplementary && (
               <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded flex-shrink-0 ${card.isBlocked ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -85,6 +89,9 @@ export default function KanbanCard({ card, draggable, compact, onCardClick, onFo
       {/* Expanded: full content */}
       {isExpanded && (
         <>
+          {card.identificador && (
+            <p className="text-[11px] font-mono font-semibold text-indigo-700 truncate mb-0.5">#{card.identificador}</p>
+          )}
           <div className="flex items-start justify-between">
             <p className="text-sm font-medium text-gray-800 truncate">{card.formName}</p>
             {card.unreadObservations > 0 && (

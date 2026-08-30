@@ -345,10 +345,11 @@ CREATE TABLE IF NOT EXISTS ticket_id_config (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   prefix VARCHAR(20),
   seq_format VARCHAR(10) NOT NULL DEFAULT 'A001',
-  seq_reset VARCHAR(20) NOT NULL DEFAULT 'trimestral',
-  current_letter CHAR(1) NOT NULL DEFAULT 'A',
+  -- Secuencia continua por tenant (sin reinicio por período, sin fecha en el ID)
+  seq_reset VARCHAR(20) NOT NULL DEFAULT 'nunca',
+  current_letter VARCHAR(6) NOT NULL DEFAULT 'A',
   current_number INTEGER NOT NULL DEFAULT 0,
-  current_period VARCHAR(10) NOT NULL DEFAULT '',
+  current_period VARCHAR(10) NOT NULL DEFAULT 'ALL',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

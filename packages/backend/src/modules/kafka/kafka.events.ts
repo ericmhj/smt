@@ -26,10 +26,32 @@ export interface TenantReactivatedEvent {
   timestamp: string; // ISO 8601
 }
 
+/**
+ * Credit ledger entry event — published by license-service after any credit operation.
+ * Used to keep the local consumption account (saldo espejo) in sync.
+ */
+export interface CreditLedgerEntryEvent {
+  type: 'credit.ledger.entry';
+  tenant_id: string;
+  slug: string;
+  entry: {
+    id: string;
+    tipo: 'consumo' | 'recarga' | 'bonus' | 'ajuste' | 'compensacion' | 'excedente';
+    cantidad: number;
+    saldo_resultante: number;
+    concepto: string;
+    perfil_documento?: string;
+    referencia?: string;
+  };
+  creditos_totales_adquiridos: number;
+  timestamp: string;
+}
+
 export type TenantLifecycleEvent =
   | TenantCreatedEvent
   | TenantSuspendedEvent
-  | TenantReactivatedEvent;
+  | TenantReactivatedEvent
+  | CreditLedgerEntryEvent;
 
 export interface KafkaConfig {
   brokers: string[];

@@ -30,3 +30,5 @@ export {
 } from './calculation.js';
 
 export { reportTemplates } from './report-templates.js';
+
+export { tenantConsumptionAccounts, consumptionLedger } from './consumption.js';

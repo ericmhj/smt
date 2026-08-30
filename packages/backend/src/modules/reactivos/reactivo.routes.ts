@@ -479,46 +479,6 @@ export async function reactivoRoutes(
       }
     },
   );
-}
-
-  // GET /api/my-reactivos — technician's reactivos (requireRole: tecnico)
-  fastify.get(
-    '/api/my-reactivos',
-    { preHandler: [tecnicoRole] },
-    async (request, reply) => {
-      const queryResult = myReactivosQuerySchema.safeParse(request.query);
-      if (!queryResult.success) {
-        return reply.status(400).send({
-          statusCode: 400,
-          code: 'VALIDATION_ERROR',
-          message: 'Parámetros de consulta inválidos',
-          details: queryResult.error.flatten().fieldErrors,
-          timestamp: new Date().toISOString(),
-          requestId: request.id,
-        });
-      }
-
-      try {
-        const result = await reactivoService.getByTecnico(request.user.sub, {
-          page: queryResult.data.page,
-          pageSize: queryResult.data.pageSize,
-          state: queryResult.data.state,
-        });
-        return reply.status(200).send(result);
-      } catch (error) {
-        if (error instanceof ReactivoError) {
-          return reply.status(error.statusCode).send({
-            statusCode: error.statusCode,
-            code: error.code,
-            message: error.message,
-            timestamp: new Date().toISOString(),
-            requestId: request.id,
-          });
-        }
-        throw error;
-      }
-    },
-  );
 
   // ─── Estudio Complementario de Cumplimiento ────────────────────────────────
 

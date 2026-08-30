@@ -128,8 +128,9 @@ export class TicketService {
     const ticketIdService = new (await import('./ticket-id.service.js')).TicketIdService(this.db);
     const generated = await ticketIdService.generateId(actor.tenantSlug);
 
-    // Inject ticket identifier into form responses as "Informe No"
-    preFilledResponses.informe_no = generated.idVisible;
+    // Inject ticket identifier into form responses as "Informe No".
+    // El campo real en la plantilla HTML del formulario se llama "informe_numero".
+    preFilledResponses.informe_numero = generated.idVisible;
 
     // Create the reactivo (Kanban card) with pre-filled client data
     const reactivoResult = await this.db

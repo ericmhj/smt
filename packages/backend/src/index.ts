@@ -2,6 +2,7 @@ import { buildApp } from './app.js';
 import { loadConfig } from './lib/config.js';
 import { TenantLifecycleConsumer } from './modules/kafka/kafka.consumer.js';
 import { TenantProvisioningService } from './modules/tenant/tenant-provisioning.service.js';
+import { ConsumptionAccountService } from './modules/consumption/consumption.service.js';
 import { KeycloakAdminClient } from './modules/tenant/keycloak-admin-client.js';
 import { db } from './db/index.js';
 
@@ -27,6 +28,7 @@ async function start(): Promise<void> {
     }
 
     const provisioningService = new TenantProvisioningService(db, keycloakAdmin);
+    const consumptionService = new ConsumptionAccountService(db);
 
     kafkaConsumer = new TenantLifecycleConsumer(config.kafka);
     kafkaConsumer.setHandler(async (event) => {
@@ -39,6 +41,9 @@ async function start(): Promise<void> {
           break;
         case 'tenant.reactivated':
           await provisioningService.reactivateTenant(event.slug);
+          break;
+        case 'credit.ledger.entry':
+          await consumptionService.handleLedgerEntry(event);
           break;
       }
     });

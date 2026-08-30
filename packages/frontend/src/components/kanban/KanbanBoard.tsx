@@ -9,6 +9,7 @@ import TransitionDialog from './TransitionDialog';
 import ComplianceSummaryModal from './ComplianceSummaryModal';
 import KanbanFilters, { KanbanFilterValues } from './KanbanFilters';
 import { KanbanCardData } from './KanbanCard';
+import EnsayoFormModal from './EnsayoFormModal';
 
 interface KanbanColumnData {
   state: string;
@@ -80,7 +81,10 @@ export default function KanbanBoard() {
       const result = await response.json();
       setData(result.columns || []);
     } catch {
-      setData([]);
+      // No vaciar el board ante un error puntual: conservar lo mostrado para que
+      // las opciones de filtro (derivadas de las tarjetas) no desaparezcan.
+      // Solo se limpia si nunca se cargó nada.
+      setData((prev) => (prev.length > 0 ? prev : []));
     } finally {
       setLoading(false);
     }
@@ -101,6 +105,15 @@ export default function KanbanBoard() {
       });
     });
     return Array.from(seen.keys()).map((name) => ({ id: name, name }));
+  }, [data]);
+
+  // Unique client names from board cards for the client filter dropdown
+  const clienteOptions = useMemo(() => {
+    const seen = new Set<string>();
+    data.forEach((col) => col.cards.forEach((card) => {
+      if (card.clienteNombre) seen.add(card.clienteNombre);
+    }));
+    return Array.from(seen).sort();
   }, [data]);
 
   // Client-side filtering (form name, client search, unread observations)
@@ -165,6 +178,10 @@ export default function KanbanBoard() {
   // Form viewer state
   const [formHtml, setFormHtml] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+  // Visor del formulario real (con estilos) en modo solo lectura
+  const [ensayoHtml, setEnsayoHtml] = useState<string | null>(null);
+  const [ensayoResponses, setEnsayoResponses] = useState<Record<string, unknown>>({});
+  const [ensayoReactivoId, setEnsayoReactivoId] = useState<string | null>(null);
 
   // Compliance summary modal state
   const [complianceReactivoId, setComplianceReactivoId] = useState<string | null>(null);
@@ -173,13 +190,37 @@ export default function KanbanBoard() {
     setFormLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      // Try detail endpoint (accessible by all roles)
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/reactivos/${cardId}`, {
-        headers: { Authorization: `Bearer ${token}`, 'X-Tenant-Slug': extractTenantSlug() },
-      });
-      if (res.ok) {
-        const detail = await res.json();
-        const responses = detail.responses || {};
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const headers = { Authorization: `Bearer ${token}`, 'X-Tenant-Slug': extractTenantSlug() };
+
+      // 1. Detalle del reactivo (accesible a todos los roles): trae responses y formId
+      const res = await fetch(`${apiUrl}/api/reactivos/${cardId}`, { headers });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Error ${res.status}: ${errorData.message || 'No se pudo obtener el formulario'}`);
+        return;
+      }
+      const detail = await res.json();
+      const responses = detail.responses || {};
+      const formId = detail.form?.id;
+
+      // 2. HTML real del formulario con estilos (GET /api/forms/:id — accesible a manager)
+      let htmlContent = '';
+      if (formId) {
+        const formRes = await fetch(`${apiUrl}/api/forms/${formId}`, { headers });
+        if (formRes.ok) {
+          const form = await formRes.json();
+          htmlContent = form.currentVersionData?.htmlContent || form.currentVersionData?.sanitizedHtml || '';
+        }
+      }
+
+      if (htmlContent) {
+        // Abrir el formulario real con estilos en modo SOLO LECTURA
+        setEnsayoResponses(responses);
+        setEnsayoReactivoId(cardId);
+        setEnsayoHtml(htmlContent);
+      } else {
+        // Fallback: vista simple de pares si no se pudo obtener el HTML con estilos
         const rows = Object.entries(responses)
           .map(([key, val]) => `<tr><td style="padding:8px 12px;font-weight:600;color:#475569;border-bottom:1px solid #f1f5f9;background:#f8fafc;width:35%;">${key.replace(/_/g, ' ')}</td><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;">${val ?? '—'}</td></tr>`)
           .join('');
@@ -194,9 +235,6 @@ export default function KanbanBoard() {
             </table>
           </div>`;
         setFormHtml(html);
-      } else {
-        const errorData = await res.json().catch(() => ({}));
-        alert(`Error ${res.status}: ${errorData.message || 'No se pudo obtener el formulario'}`);
       }
     } catch (err) {
       alert('Error de conexión al obtener el formulario');
@@ -282,7 +320,7 @@ export default function KanbanBoard() {
         </div>
       )}
 
-      <KanbanFilters values={filters} onChange={setFilters} formOptions={formOptions} />
+      <KanbanFilters values={filters} onChange={setFilters} formOptions={formOptions} clienteOptions={clienteOptions} />
 
       {loading && (
         <p className="text-gray-500 my-4">Cargando tablero...</p>
@@ -380,6 +418,26 @@ export default function KanbanBoard() {
             />
           </div>
         </div>
+      )}
+
+      {/* Visor del formulario real con estilos (solo lectura) */}
+      {ensayoHtml && ensayoReactivoId && (
+        <EnsayoFormModal
+          reactivoId={ensayoReactivoId}
+          htmlContent={ensayoHtml}
+          initialResponses={ensayoResponses}
+          readOnly={true}
+          onClose={() => {
+            setEnsayoHtml(null);
+            setEnsayoResponses({});
+            setEnsayoReactivoId(null);
+          }}
+          onSubmitSuccess={() => {
+            setEnsayoHtml(null);
+            setEnsayoResponses({});
+            setEnsayoReactivoId(null);
+          }}
+        />
       )}
 
       {/* Compliance Summary Modal */}

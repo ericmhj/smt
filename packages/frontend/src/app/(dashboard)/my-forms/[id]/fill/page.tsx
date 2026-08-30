@@ -25,6 +25,8 @@ export default function FillFormPage() {
 
   // The params.id is the assignment ID, formId comes from the link's query param
   const formId = searchParams.get('formId') || params.id;
+  // Número de informe (viene del ticket). Si está presente, se muestra en el formulario.
+  const informeNo = searchParams.get('informeNo');
 
   useEffect(() => {
     const fetchForm = async () => {
@@ -68,7 +70,8 @@ export default function FillFormPage() {
     const token = localStorage.getItem('access_token') || '';
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
     // Open form in new window — the render endpoint serves full HTML with submit logic
-    const url = `${apiUrl}/api/forms/${formDetail.id}/render`;
+    const informeParam = informeNo ? `?informeNo=${encodeURIComponent(informeNo)}` : '';
+    const url = `${apiUrl}/api/forms/${formDetail.id}/render${informeParam}`;
     const win = window.open('about:blank', '_blank');
     if (win) {
       // Fetch with auth and write HTML to the new window

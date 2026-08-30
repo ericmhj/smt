@@ -2,6 +2,7 @@ import { eq, and, sql, gte, lte, type SQL } from 'drizzle-orm';
 import type { Database } from '../../db/index.js';
 import { reactivos, stateTransitions } from '../../db/schema/reactivos.js';
 import { tickets } from '../../db/schema/tickets.js';
+import { clientes } from '../../db/schema/clientes.js';
 import { forms } from '../../db/schema/forms.js';
 import { users } from '../../db/schema/users.js';
 import { observations } from '../../db/schema/observations.js';
@@ -66,7 +67,21 @@ export class KanbanService {
         attemptNumber: reactivos.attemptNumber,
         state: reactivos.state,
         createdAt: reactivos.createdAt,
-        clienteNombre: reactivos.clienteNombre,
+        // Identificador visible de la tarjeta (del ticket asociado).
+        identificador: sql<string | null>`(
+          select ${tickets.identificador} from ${tickets}
+          where ${tickets.reactivoId} = ${reactivos.id}
+          limit 1
+        )`,
+        // Nombre del cliente: preferir el del ticket asociado (dato real vía clientes),
+        // con fallback a reactivos.clienteNombre (llenado al crear desde ticket).
+        clienteNombre: sql<string | null>`coalesce(
+          (select ${clientes.nombre} from ${tickets}
+             join ${clientes} on ${clientes.id} = ${tickets.clienteId}
+           where ${tickets.reactivoId} = ${reactivos.id}
+           limit 1),
+          ${reactivos.clienteNombre}
+        )`,
         fechaProgramada: reactivos.fechaProgramada,
         parentReactivoId: reactivos.parentReactivoId,
         responses: reactivos.responses,
@@ -110,6 +125,7 @@ export class KanbanService {
 
           return {
             id: r.id,
+            identificador: r.identificador || undefined,
             formName: r.formName,
             tecnicoName: r.tecnicoName,
             attemptNumber: r.attemptNumber,

@@ -57,55 +57,42 @@ export class TicketIdService {
     // Get or create config (atomic)
     const config = await this.getOrCreateConfig(sqlClient);
 
-    // Calculate current period
-    const now = new Date();
-    const currentPeriod = this.calculatePeriod(now, config.seqReset);
-    const dateStr = this.formatDate(now);
-
-    // Check if period changed → reset counter
-    let letter = config.currentLetter;
+    // Secuencia CONTINUA por tenant (sin reinicio por período, sin fecha en el ID).
+    // El contador nunca se reinicia, por lo que prefix-seq es único por tenant.
+    let letter = config.currentLetter || 'A';
     let number = config.currentNumber;
 
-    if (currentPeriod !== config.currentPeriod) {
-      letter = 'A';
-      number = 0;
-    }
-
-    // Increment
+    // Incrementar
     number++;
     const maxForFormat = this.getMaxNumber(config.seqFormat);
 
     if (number > maxForFormat) {
-      // Roll to next letter
-      letter = String.fromCharCode(letter.charCodeAt(0) + 1);
+      // La serie de números se agotó → avanzar la(s) letra(s): A→B→…→Z→AA→AB…
+      letter = this.nextLetterSeq(letter);
       number = 1;
-      if (letter > 'Z') {
-        // Extremely unlikely: 25,974+ tickets in one period
-        letter = 'A';
-      }
     }
 
-    // Format the sequential part
-    const seqStr = this.formatSequential(letter, number, config.seqFormat);
+    // Formatear la parte secuencial
+    const seqStr = this.formatSequentialLetters(letter, number, config.seqFormat);
 
-    // Build IDs
-    const idInterno = `${hashId}-${dateStr}-${seqStr}`;
+    // Construir IDs (sin fecha): {prefix}-{seq}
+    const idInterno = `${hashId}-${seqStr}`;
     const prefix = config.prefix || hashId;
-    const idVisible = `${prefix}-${dateStr}-${seqStr}`;
+    const idVisible = `${prefix}-${seqStr}`;
 
-    // Update config atomically
+    // Persistir el contador atómicamente (period fijo 'ALL' — sin reinicio)
     await sqlClient.unsafe(
-      `UPDATE ticket_id_config SET current_letter = $1, current_number = $2, current_period = $3, updated_at = NOW() WHERE id = (SELECT id FROM ticket_id_config LIMIT 1)`,
-      [letter, number, currentPeriod],
+      `UPDATE ticket_id_config SET current_letter = $1, current_number = $2, current_period = 'ALL', seq_reset = 'nunca', updated_at = NOW() WHERE id = (SELECT id FROM ticket_id_config LIMIT 1)`,
+      [letter, number],
     );
 
-    // Insert into registry
-    const consecutivoAbsoluto = (letter.charCodeAt(0) - 65) * maxForFormat + number;
+    // Consecutivo absoluto (para el registro)
+    const consecutivoAbsoluto = this.letterSeqToIndex(letter) * maxForFormat + number;
 
     return {
       idInterno,
       idVisible,
-      periodo: currentPeriod,
+      periodo: 'ALL',
       consecutivo: consecutivoAbsoluto,
     };
   }
@@ -134,23 +121,19 @@ export class TicketIdService {
       };
     }
 
-    // Create default config
-    const now = new Date();
-    const period = this.calculatePeriod(now, 'trimestral');
-
+    // Config por defecto: secuencia CONTINUA por tenant (sin reinicio, sin fecha).
     await sqlClient.unsafe(
       `INSERT INTO ticket_id_config (prefix, seq_format, seq_reset, current_letter, current_number, current_period)
-       VALUES (NULL, 'A001', 'trimestral', 'A', 0, $1)`,
-      [period],
+       VALUES (NULL, 'A001', 'nunca', 'A', 0, 'ALL')`,
     );
 
     return {
       prefix: null,
       seqFormat: 'A001',
-      seqReset: 'trimestral',
+      seqReset: 'nunca',
       currentLetter: 'A',
       currentNumber: 0,
-      currentPeriod: period,
+      currentPeriod: 'ALL',
     };
   }
 
@@ -211,6 +194,51 @@ export class TicketIdService {
         return String(number).padStart(4, '0');
       default:
         return `${letter}${String(number).padStart(3, '0')}`;
+    }
+  }
+
+  /**
+   * Avanza la secuencia de letras: A→B→…→Z→AA→AB→…→AZ→BA→… (base-26 tipo Excel).
+   */
+  private nextLetterSeq(letters: string): string {
+    const chars = (letters || 'A').split('');
+    let i = chars.length - 1;
+    while (i >= 0) {
+      if (chars[i] === 'Z') {
+        chars[i] = 'A';
+        i--;
+      } else {
+        chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1);
+        return chars.join('');
+      }
+    }
+    // Todas eran 'Z' → se agrega una letra más (Z→AA, ZZ→AAA, …)
+    return 'A' + chars.join('');
+  }
+
+  /**
+   * Índice absoluto de una secuencia de letras (A=1, B=2, …, Z=26, AA=27, …).
+   */
+  private letterSeqToIndex(letters: string): number {
+    let idx = 0;
+    for (const ch of (letters || 'A')) {
+      idx = idx * 26 + (ch.charCodeAt(0) - 64);
+    }
+    return idx;
+  }
+
+  /**
+   * Formatea la parte secuencial soportando letras múltiples (AA001, etc.).
+   */
+  private formatSequentialLetters(letters: string, number: number, seqFormat: string): string {
+    switch (seqFormat) {
+      case '001':
+        return String(number).padStart(3, '0');
+      case '0001':
+        return String(number).padStart(4, '0');
+      case 'A001':
+      default:
+        return `${letters}${String(number).padStart(3, '0')}`;
     }
   }
 

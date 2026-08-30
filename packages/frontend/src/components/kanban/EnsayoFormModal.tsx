@@ -37,8 +37,47 @@ export default function EnsayoFormModal({
     const tenantSlug = window.location.hostname.split('.')[0] || 'default';
     const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+    const refreshToken = localStorage.getItem('refresh_token') || '';
+
     // Strip <form> tags to avoid conflicts
     let formHtml = htmlContent.replace(/<form[^>]*>/gi, '').replace(/<\/form>/gi, '');
+
+    // Script de auto-refresco del token: mantiene window.__formToken vigente hasta
+    // 6h renovándolo con el refresh_token antes de que el access_token (15 min)
+    // expire. Así el formulario puede llenarse durante horas sin perder sesión.
+    const tokenRefreshScript = `
+<script>
+(function() {
+  window.__formToken = '${token}';
+  var refreshToken = '${refreshToken}';
+  var apiBase = '${apiBase}';
+  var tenantSlug = '${tenantSlug}';
+  var startedAt = Date.now();
+  var MAX_MS = 6 * 60 * 60 * 1000; // 6 horas
+
+  function refresh() {
+    // Dejar de renovar tras 6h de sesión de formulario
+    if (Date.now() - startedAt > MAX_MS) return;
+    if (!refreshToken) return;
+    fetch(apiBase + '/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Tenant-Slug': tenantSlug },
+      body: JSON.stringify({ refreshToken: refreshToken })
+    })
+    .then(function(res){ return res.ok ? res.json() : null; })
+    .then(function(data){
+      if (data && data.accessToken) {
+        window.__formToken = data.accessToken;
+        if (data.refreshToken) refreshToken = data.refreshToken;
+      }
+    })
+    .catch(function(){});
+  }
+
+  // Renovar cada 10 minutos (el access_token dura 15 min)
+  setInterval(refresh, 10 * 60 * 1000);
+})();
+</script>`;
 
     // Inject initial values as a global variable BEFORE the form scripts run
     let initScript = '';
@@ -129,7 +168,7 @@ window.addEventListener('load', function() {
     lastSaved = json;
     fetch('${apiBase}/api/reactivos/${reactivoId}/draft', {
       method: 'POST',
-      headers: {'Content-Type':'application/json','Authorization':'Bearer ${token}','X-Tenant-Slug':'${tenantSlug}'},
+      headers: {'Content-Type':'application/json','Authorization':'Bearer '+(window.__formToken||'${token}'),'X-Tenant-Slug':'${tenantSlug}'},
       body: JSON.stringify({responses: r})
     }).then(function() {
       var badge = document.querySelector('.autosave-badge');
@@ -230,15 +269,57 @@ document.addEventListener('DOMContentLoaded', function() {
     if (pd && pd.value) r['plano_areas_json'] = pd.value;
     // Capture full rendered HTML for PDF (exact copy of what user sees)
     try {
+      // 1. Fijar en ATRIBUTOS los valores en vivo de los campos de formulario.
+      //    cloneNode copia atributos, no propiedades (el.value); sin esto el
+      //    "Informe No" y demás campos salen vacíos en el PDF.
+      document.querySelectorAll('input[name]').forEach(function(el) {
+        var t = el.getAttribute('type');
+        if (t === 'checkbox' || t === 'radio') {
+          if (el.checked) el.setAttribute('checked', 'checked'); else el.removeAttribute('checked');
+        } else {
+          el.setAttribute('value', el.value != null ? el.value : '');
+        }
+      });
+      document.querySelectorAll('textarea[name], textarea').forEach(function(el) {
+        el.textContent = el.value != null ? el.value : '';
+      });
+      document.querySelectorAll('select[name]').forEach(function(el) {
+        for (var i = 0; i < el.options.length; i++) {
+          if (el.options[i].selected) el.options[i].setAttribute('selected', 'selected');
+          else el.options[i].removeAttribute('selected');
+        }
+      });
+
+      // 2. Clonar el documento
       var clone = document.documentElement.cloneNode(true);
-      clone.querySelectorAll('script').forEach(function(s){s.remove();});
+
+      // 3. Reemplazar el canvas Konva (#konva-stage) por la imagen exportada del plano.
+      //    Se mantiene la altura del contenedor para que la brújula (overlay
+      //    position:absolute dentro de #plano-container) quede bien posicionada
+      //    sobre la imagen y NO flote suelta en otra hoja.
+      var stageHost = clone.querySelector('#konva-stage');
+      if (stageHost) {
+        if (canvasImage) {
+          var img = document.createElement('img');
+          img.setAttribute('src', canvasImage);
+          img.setAttribute('style', 'width:100%;max-width:760px;height:auto;display:block;');
+          stageHost.innerHTML = '';
+          stageHost.appendChild(img);
+        } else {
+          stageHost.innerHTML = '';
+        }
+      }
+
+      // 5. Quitar scripts y la barra fija de envío
+      clone.querySelectorAll('script').forEach(function(s){ s.remove(); });
       var fixedBar = clone.querySelector('div[style*="position:fixed"]');
-      if(fixedBar) fixedBar.remove();
+      if (fixedBar) fixedBar.remove();
+
       r['__rendered_html'] = clone.outerHTML;
     } catch(e) {}
     fetch('${apiBase}/api/reactivos/${reactivoId}/submit',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer ${token}','X-Tenant-Slug':'${tenantSlug}'},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+(window.__formToken||'${token}'),'X-Tenant-Slug':'${tenantSlug}'},
       body:JSON.stringify({responses:r})
     })
     .then(function(res){if(!res.ok)return res.json().then(function(d){throw new Error(d.message||'Error')});return res.json();})
@@ -256,6 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <html lang="es">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${readOnly ? 'Ver Formulario' : 'Llenar Ensayo'}</title>
+${tokenRefreshScript}
 ${initScript}
 </head>
 <body>${formHtml}${postLoadScript}${autoSaveScript}${submitScript}</body>

@@ -1,10 +1,15 @@
 import { z } from 'zod';
 
+// Tolerante: acepta valores vacíos y fechas en formato YYYY-MM-DD o ISO.
+// Evita respuestas 400 por filtros normales (que el frontend capturaba en
+// silencio, vaciando el board y las opciones de filtro).
+const optionalNonEmpty = z.string().trim().min(1).optional().or(z.literal('').transform(() => undefined));
+
 export const kanbanBoardQuerySchema = z.object({
-  tecnicoId: z.string().uuid('tecnicoId debe ser un UUID válido').optional(),
-  formId: z.string().uuid('formId debe ser un UUID válido').optional(),
-  dateFrom: z.string().datetime({ offset: true }).optional().or(z.string().date().optional()),
-  dateTo: z.string().datetime({ offset: true }).optional().or(z.string().date().optional()),
+  tecnicoId: optionalNonEmpty,
+  formId: optionalNonEmpty,
+  dateFrom: optionalNonEmpty,
+  dateTo: optionalNonEmpty,
 });
 
 export const kanbanTransitionBodySchema = z.object({

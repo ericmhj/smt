@@ -2,6 +2,7 @@ import type { ReactivoState } from '../reactivos/reactivo.types.js';
 
 export interface KanbanCard {
   id: string;
+  identificador?: string;
   formName: string;
   tecnicoName: string;
   attemptNumber: number;

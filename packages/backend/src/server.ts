@@ -2,6 +2,7 @@ import { buildApp } from './app.js';
 import { loadConfig } from './lib/config.js';
 import { TenantLifecycleConsumer } from './modules/kafka/kafka.consumer.js';
 import { TenantProvisioningService } from './modules/tenant/tenant-provisioning.service.js';
+import { ConsumptionAccountService } from './modules/consumption/consumption.service.js';
 import { KeycloakAdminClient } from './modules/tenant/keycloak-admin-client.js';
 import { db } from './db/index.js';
 import { deriveSlug } from './lib/slug.js';
@@ -35,6 +36,7 @@ const start = async () => {
       }
 
       const provisioningService = new TenantProvisioningService(db, keycloakAdmin);
+      const consumptionService = new ConsumptionAccountService(db);
 
       kafkaConsumer = new TenantLifecycleConsumer(config.kafka);
       kafkaConsumer.setHandler(async (rawEvent: any) => {
@@ -91,6 +93,18 @@ const start = async () => {
           case 'tenant.reactivated':
             if (payload.slug) {
               await provisioningService.reactivateTenant(payload.slug);
+            }
+            break;
+          case 'credit.ledger.entry':
+            if (payload.slug && payload.entry) {
+              await consumptionService.handleLedgerEntry({
+                type: 'credit.ledger.entry',
+                tenant_id: payload.tenant_id || payload.tenantId || '',
+                slug: payload.slug,
+                entry: payload.entry,
+                creditos_totales_adquiridos: payload.creditos_totales_adquiridos || 0,
+                timestamp: payload.timestamp || payload.occurredAt || new Date().toISOString(),
+              });
             }
             break;
         }

@@ -43,11 +43,13 @@ interface KanbanFiltersProps {
   hideTecnico?: boolean;
   /** Pre-built form options extracted from board data (bypasses API call for forms) */
   formOptions?: FormOption[];
+  /** Nombres de cliente extraídos de las tarjetas del board para el dropdown */
+  clienteOptions?: string[];
 }
 
 // ---------- Component ----------
 
-export default function KanbanFilters({ values, onChange, hideTecnico, formOptions }: KanbanFiltersProps) {
+export default function KanbanFilters({ values, onChange, hideTecnico, formOptions, clienteOptions }: KanbanFiltersProps) {
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
   const [forms, setForms] = useState<FormOption[]>([]);
   const [expanded, setExpanded] = useState(false);
@@ -140,24 +142,22 @@ export default function KanbanFilters({ values, onChange, hideTecnico, formOptio
         className={`${expanded ? 'block' : 'hidden'} md:block`}
       >
         <div className="flex flex-wrap items-end gap-3 p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
-          {/* Search */}
-          <div className="flex-1 min-w-[180px]">
-            <label htmlFor="kanban-filter-search" className="block text-xs font-medium text-gray-500 mb-1">
-              Buscar cliente
+          {/* Cliente: dropdown (derivado de las tarjetas del board) */}
+          <div className="min-w-[200px]">
+            <label htmlFor="kanban-filter-cliente" className="block text-xs font-medium text-gray-500 mb-1">
+              Cliente
             </label>
-            <div className="relative">
-              <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-              </svg>
-              <input
-                id="kanban-filter-search"
-                type="text"
-                placeholder="Nombre del cliente..."
-                value={values.clientSearch}
-                onChange={(e) => update({ clientSearch: e.target.value })}
-                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              />
-            </div>
+            <select
+              id="kanban-filter-cliente"
+              value={values.clientSearch}
+              onChange={(e) => update({ clientSearch: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+            >
+              <option value="">Todos los clientes</option>
+              {(clienteOptions || []).map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </div>
 
           {/* Técnico dropdown */}
