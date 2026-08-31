@@ -12,9 +12,18 @@ import type { Database } from '../../db/index.js';
 
 export async function kanbanRoutes(
   fastify: FastifyInstance,
-  opts: { db: Database },
+  opts: {
+    db: Database;
+    reportCharge?: {
+      standaloneAuth: boolean;
+      licenseServiceUrl?: string;
+      timeoutMs?: number;
+      gatewaySecret?: string;
+      gatewayRole?: string;
+    };
+  },
 ): Promise<void> {
-  const kanbanService = new KanbanService(opts.db);
+  const kanbanService = new KanbanService(opts.db, opts.reportCharge);
 
   const viewRole = requireRole(['superusuario', 'admin', 'manager', 'tecnico']);
   const managerOnly = requireRole(['manager']);

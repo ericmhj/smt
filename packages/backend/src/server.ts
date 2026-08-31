@@ -65,24 +65,55 @@ const start = async () => {
 
         console.log(`[KafkaHandler] Processing: ${eventType}, slug: ${payload.slug || payload.tenantId}`);
 
+        // tenant_id de license-service (fuente de verdad). Es la clave de
+        // correlación (license_tenant_id en public.tenants).
+        const licenseTenantId = payload.tenant_id || payload.tenantId || '';
+
+        // Campos espejo desde la fuente de verdad (pueden no venir en eventos antiguos).
+        const buildEvent = (): any => ({
+          type: 'tenant.created',
+          tenant_id: licenseTenantId,
+          slug: payload.slug || deriveSlug(payload.nombre),
+          nombre: payload.nombre || payload.slug || '',
+          admin_email: payload.admin_email || payload.emailContacto || '',
+          plan_codigo: payload.plan_codigo || payload.planCodigo,
+          estado: payload.estado,
+          config: payload.config,
+          timestamp: payload.occurredAt || new Date().toISOString(),
+        });
+
         switch (eventType) {
-          case 'tenant.activated':
-          case 'tenant.created':
+          // Creación en license-service: crea el espejo en SMT en estado 'onboarding'.
           case 'tenant.onboarded':
+          case 'tenant.created': {
             if (payload.slug || payload.nombre) {
               const adminEmail = payload.admin_email || payload.emailContacto;
               if (!adminEmail) {
                 console.error(`[KafkaHandler] Evento ${eventType} rechazado: no se proporcionó admin_email para slug '${payload.slug}'`);
                 break;
               }
-              await provisioningService.provisionTenant({
-                type: 'tenant.created',
-                tenant_id: payload.tenantId || payload.tenant_id || '',
-                slug: payload.slug || deriveSlug(payload.nombre),
-                nombre: payload.nombre || payload.slug || '',
-                admin_email: adminEmail,
-                timestamp: payload.occurredAt || new Date().toISOString(),
-              });
+              await provisioningService.provisionTenant(buildEvent(), { status: 'onboarding' });
+            }
+            break;
+          }
+          // Activación en license-service: marca el espejo como 'active'
+          // (y lo provisiona si aún no existía).
+          case 'tenant.activated': {
+            if (payload.slug || payload.nombre) {
+              await provisioningService.activateTenant(buildEvent());
+            }
+            break;
+          }
+          // Cambio de nombre/plan en license-service: refresca columnas espejo.
+          case 'tenant.updated': {
+            if (payload.slug || payload.nombre) {
+              await provisioningService.updateTenant(buildEvent());
+            }
+            break;
+          }
+          case 'tenant.cancelled':
+            if (payload.slug) {
+              await provisioningService.cancelTenant(payload.slug);
             }
             break;
           case 'tenant.suspended':

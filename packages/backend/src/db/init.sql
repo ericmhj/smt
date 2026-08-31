@@ -365,6 +365,9 @@ CREATE INDEX IF NOT EXISTS idx_validation_rules_active ON public.validation_rule
 -- Tenants table
 CREATE TABLE IF NOT EXISTS tenants (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  -- FK lógica hacia license-service (fuente de verdad): tenant.id (UUID).
+  -- Clave de correlación cross-service. El id local se conserva por compatibilidad.
+  license_tenant_id UUID UNIQUE,
   slug VARCHAR(50) NOT NULL UNIQUE,
   nombre VARCHAR(255) NOT NULL,
   plan VARCHAR(50) NOT NULL DEFAULT 'starter',
@@ -373,7 +376,9 @@ CREATE TABLE IF NOT EXISTS tenants (
   scheduled_deletion_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT tenants_status_check CHECK (status IN ('active', 'suspended', 'pending_deletion'))
+  -- 'onboarding' = tenant creado en license-service pero aún no activado.
+  -- 'cancelled' = estado terminal replicado desde license-service.
+  CONSTRAINT tenants_status_check CHECK (status IN ('onboarding', 'active', 'suspended', 'cancelled', 'pending_deletion'))
 );
 
 -- Plans table

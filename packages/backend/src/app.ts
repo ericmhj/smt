@@ -193,7 +193,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(reactivoRoutes, { db });
 
   // Register kanban routes
-  await app.register(kanbanRoutes, { db });
+  await app.register(kanbanRoutes, {
+    db,
+    reportCharge: {
+      standaloneAuth: config.standaloneAuth,
+      licenseServiceUrl: config.licenseService?.baseUrl,
+      timeoutMs: config.licenseService?.timeoutMs,
+      gatewaySecret: config.licenseService?.gatewaySecret,
+      gatewayRole: config.licenseService?.gatewayRole,
+    },
+  });
 
   // Register signature routes
   await app.register(signatureRoutes, { db });

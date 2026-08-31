@@ -96,6 +96,13 @@ export class PdfPipelineService {
       html = this.buildThemedHtml(activeSections, context, theme, themeConfig);
     }
 
+    // DRAFT: si el cobro variable no se aplicó al finalizar, marcar el reporte
+    // con marca de agua en todas las páginas.
+    const draftMeta = context.responses?.['_draft'] as { isDraft?: boolean } | undefined;
+    if (draftMeta?.isDraft) {
+      html = this.injectDraftWatermark(html);
+    }
+
     // Render with Puppeteer
     const browser = await puppeteer.launch({
       headless: true,
@@ -118,6 +125,42 @@ export class PdfPipelineService {
     } finally {
       await browser.close();
     }
+  }
+
+  /**
+   * Inyecta una marca de agua "DRAFT" repetida sobre el contenido del reporte.
+   * Se usa cuando el cobro variable no pudo aplicarse al finalizar.
+   */
+  private injectDraftWatermark(html: string): string {
+    const watermarkCss = `
+    <style id="draft-watermark-style">
+      body::before {
+        content: "DRAFT";
+        position: fixed;
+        top: 45%;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 120px;
+        font-weight: 800;
+        color: rgba(220, 38, 38, 0.14);
+        letter-spacing: 20px;
+        transform: rotate(-30deg);
+        transform-origin: center;
+        z-index: 9999;
+        pointer-events: none;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    </style>`;
+
+    if (/<\/head>/i.test(html)) {
+      return html.replace(/<\/head>/i, `${watermarkCss}</head>`);
+    }
+    if (/<body[^>]*>/i.test(html)) {
+      return html.replace(/(<body[^>]*>)/i, `$1${watermarkCss}`);
+    }
+    return watermarkCss + html;
   }
 
   private getPageMargins(themeConfig?: Record<string, unknown>): { top: string; bottom: string; left: string; right: string } {

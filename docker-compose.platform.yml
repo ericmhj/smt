@@ -167,6 +167,8 @@ services:
     command:
       - |
         echo "Creando topics de Kafka..."
+        # Topic real usado por el publisher (outbox) de license-service y el consumer de SMT.
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server license-kafka:9092 --create --if-not-exists --topic license-events --partitions 8 --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server license-kafka:9092 --create --if-not-exists --topic tenant.lifecycle --partitions 4 --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server license-kafka:9092 --create --if-not-exists --topic license.events --partitions 4 --replication-factor 1
         echo "Topics creados:"

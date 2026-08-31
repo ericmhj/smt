@@ -17,9 +17,14 @@ while ! nc -z redis 6379 2>/dev/null; do
 done
 echo "Redis is ready."
 
+cd /app
+
+# Apply public-schema migrations (idempotent). Debe ir ANTES del seed.
+echo "Applying public migrations..."
+pnpm --filter @sgr/backend db:migrate:public 2>&1 || echo "Public migrations skipped (may already be applied or has errors)."
+
 # Run seed (idempotent)
 echo "Running database seed..."
-cd /app
 pnpm --filter @sgr/backend db:seed 2>&1 || echo "Seed skipped (may already be applied or has errors)."
 
 # Start the server

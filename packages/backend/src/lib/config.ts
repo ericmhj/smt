@@ -53,6 +53,10 @@ export interface AppConfig {
       failureThreshold: number;
       resetTimeoutMs: number;
     };
+    /** Secreto compartido con el gateway del license-service (X-Gateway-Secret). */
+    gatewaySecret: string;
+    /** Rol operacional para llamadas servicio-a-servicio (X-User-Role). */
+    gatewayRole: string;
   };
 }
 
@@ -120,6 +124,8 @@ export function loadConfig(): AppConfig {
         failureThreshold: 3,
         resetTimeoutMs: 60000,
       },
+      gatewaySecret: process.env.LICENSE_GATEWAY_SECRET || 'mikel-gateway-internal-dev-2026',
+      gatewayRole: process.env.LICENSE_GATEWAY_ROLE || 'platform_admin',
     };
 
     config.keycloakAdmin = {

@@ -33,8 +33,18 @@ async function start(): Promise<void> {
     kafkaConsumer = new TenantLifecycleConsumer(config.kafka);
     kafkaConsumer.setHandler(async (event) => {
       switch (event.type) {
+        case 'tenant.onboarded':
         case 'tenant.created':
-          await provisioningService.provisionTenant(event);
+          // Creación en license-service: espejo en estado 'onboarding'.
+          await provisioningService.provisionTenant(event, { status: 'onboarding' });
+          break;
+        case 'tenant.activated':
+          // Activación: marca 'active' (provisiona si aún no existía).
+          await provisioningService.activateTenant(event);
+          break;
+        case 'tenant.updated':
+          // Cambio de nombre/plan: refresca columnas espejo.
+          await provisioningService.updateTenant(event);
           break;
         case 'tenant.suspended':
           await provisioningService.suspendTenant(event.slug);
@@ -52,7 +62,7 @@ async function start(): Promise<void> {
       await kafkaConsumer.start();
       app.log.info('[Integración] Kafka consumer iniciado');
     } catch (error) {
-      app.log.error('[Integración] Error iniciando Kafka consumer — el servicio continúa sin Kafka:', error);
+      app.log.error(`[Integración] Error iniciando Kafka consumer — el servicio continúa sin Kafka: ${error instanceof Error ? error.message : String(error)}`);
       // Don't crash the server if Kafka is unavailable
       kafkaConsumer = null;
     }

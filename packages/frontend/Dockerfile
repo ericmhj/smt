@@ -1,5 +1,6 @@
 # Single stage: install deps and run Next.js in dev mode for now
-FROM node:20-alpine
+# Node 22: requerido por pnpm@9.12.0 (packageManager en package.json).
+FROM node:22-alpine
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /app
 

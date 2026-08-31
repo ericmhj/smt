@@ -10,6 +10,7 @@ import { validateTransition } from '../reactivos/state-machine.js';
 import { ReactivoService } from '../reactivos/reactivo.service.js';
 import { ComplementaryStudyService } from '../reactivos/complementary-study.service.js';
 import { KanbanError, KanbanErrorCode } from './kanban.errors.js';
+import { ReportChargeService, type ReportChargeConfig } from '../credits/report-charge.service.js';
 import type {
   KanbanBoard,
   KanbanColumn,
@@ -24,11 +25,17 @@ export class KanbanService {
   private db: Database;
   private reactivoService: ReactivoService;
   private complementaryStudyService: ComplementaryStudyService;
+  private reportChargeService: ReportChargeService;
 
-  constructor(db: Database) {
+  constructor(db: Database, reportChargeConfig?: ReportChargeConfig) {
     this.db = db;
     this.reactivoService = new ReactivoService(db);
     this.complementaryStudyService = new ComplementaryStudyService(db);
+    // Por defecto standalone (sin cobro) si no se inyecta configuración.
+    this.reportChargeService = new ReportChargeService(
+      db,
+      reportChargeConfig ?? { standaloneAuth: true },
+    );
   }
 
   /**
@@ -267,6 +274,14 @@ export class KanbanService {
     // Hook: Sync reactivo state with associated ticket
     await this.syncTicketState(reactivoId, toState);
 
+    // Hook: Cargo variable automático al finalizar el reporte.
+    // Aplica con el mismo criterio a reactivos normales y complementarios.
+    // Si el cobro no procede (mapeo ausente, matrices inconsistentes, saldo
+    // insuficiente o servicio caído), el reporte se marca DRAFT.
+    if (toState === 'finalizado') {
+      await this.applyVariableCharge(reactivoId, actor);
+    }
+
     // Hook: Auto-create complementary compliance study when transitioning to 'finalizado'
     if (toState === 'finalizado') {
       try {
@@ -298,6 +313,87 @@ export class KanbanService {
       reason: transition.reason,
       createdAt: transition.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * Aplica el cargo variable al finalizar un reporte. Lee las respuestas del
+   * reactivo (incluyendo el HTML renderizado real), delega en ReportChargeService
+   * y, si el cobro no procede, marca el reporte para PDF con marca DRAFT.
+   * Non-blocking: nunca falla la transición.
+   */
+  private async applyVariableCharge(reactivoId: string, actor: JWTPayload): Promise<void> {
+    try {
+      const row = (
+        await this.db
+          .select({ responses: reactivos.responses })
+          .from(reactivos)
+          .where(eq(reactivos.id, reactivoId))
+          .limit(1)
+      )[0];
+
+      if (!row) return;
+
+      const responses = (row.responses || {}) as Record<string, unknown>;
+
+      const result = await this.reportChargeService.chargeOnFinalize(
+        reactivoId,
+        responses,
+        actor.tenantSlug,
+        actor.sub,
+      );
+
+      if (result.charged) {
+        console.log(
+          `[Kanban] Cargo variable aplicado: reactivo=${reactivoId}, puntos=${result.numeroPuntos}`,
+        );
+        // Éxito: asegurar que no quede una marca DRAFT previa.
+        await this.setDraftFlag(reactivoId, responses, null);
+        return;
+      }
+
+      // No se cobró. Marcar DRAFT salvo en modo standalone.
+      console.warn(
+        `[Kanban] Cargo variable NO aplicado (reactivo=${reactivoId}): ${result.reason} — ${result.message}`,
+      );
+      if (result.draft) {
+        await this.setDraftFlag(reactivoId, responses, {
+          reason: result.reason,
+          message: result.message,
+          numeroPuntos: result.numeroPuntos ?? null,
+        });
+      }
+    } catch (err) {
+      // Non-critical: log y continuar (no romper la transición).
+      console.error(`[Kanban] Error aplicando cargo variable a reactivo ${reactivoId}:`, err);
+    }
+  }
+
+  /**
+   * Persiste (o limpia) la marca DRAFT del reporte en responses._draft.
+   * La generación del PDF consulta esta marca para renderizar la marca de agua.
+   */
+  private async setDraftFlag(
+    reactivoId: string,
+    responses: Record<string, unknown>,
+    draft: { reason: string; message: string; numeroPuntos: number | null } | null,
+  ): Promise<void> {
+    const updated: Record<string, unknown> = { ...responses };
+    if (draft) {
+      updated._draft = {
+        isDraft: true,
+        motivo: draft.reason,
+        detalle: draft.message,
+        numeroPuntos: draft.numeroPuntos,
+        marcadoEn: new Date().toISOString(),
+      };
+    } else {
+      delete updated._draft;
+    }
+
+    await this.db
+      .update(reactivos)
+      .set({ responses: updated, updatedAt: new Date() })
+      .where(eq(reactivos.id, reactivoId));
   }
 
   /**
