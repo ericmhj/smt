@@ -23,7 +23,8 @@ import { splitName } from './name-utils.js';
 const ROLE_HIERARCHY: Record<Role, Role[]> = {
   platform_admin: ['superusuario', 'admin', 'manager', 'tecnico', 'asistente'],
   superusuario: ['admin', 'manager', 'tecnico', 'asistente'],
-  admin: ['manager', 'tecnico', 'asistente'],
+  // admin can manage other admins (peer management, incl. password reset) and lower roles.
+  admin: ['admin', 'manager', 'tecnico', 'asistente'],
   manager: [],
   tecnico: [],
   asistente: [],
@@ -168,9 +169,19 @@ export class UserService {
         await this.keycloakAdmin.updateUser({ userId: id, ...profileChanges });
       }
 
-      // Reset password if provided
+      // Reset password if provided, then revoke all active sessions so the
+      // password change actually expels existing sessions (invalidates refresh
+      // tokens and forces re-authentication). Short-lived access tokens already
+      // issued expire on their own within minutes.
       if (data.password !== undefined) {
         await this.keycloakAdmin.resetPassword({ userId: id, password: data.password, temporary: false });
+        try {
+          await this.keycloakAdmin.logoutUser(id);
+        } catch (logoutError) {
+          // Non-blocking: the password was already changed. Log and continue so
+          // the operation still succeeds even if session revocation hiccups.
+          console.warn(`[UserService] Session revocation failed for ${id}: ${logoutError instanceof Error ? logoutError.message : 'unknown'}`);
+        }
       }
 
       // Set roles if provided

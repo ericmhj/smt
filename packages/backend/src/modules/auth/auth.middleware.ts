@@ -80,10 +80,26 @@ async function authMiddlewarePlugin(
     try {
       const payload = await authStrategy.verifyToken(token);
 
-      // Enrich tenantSlug from request headers/subdomain when JWT doesn't include it
-      // (Keycloak tokens don't carry tenantSlug, so we resolve from X-Tenant-Slug header or subdomain)
+      // Tenant binding rules:
+      // - Regular tenant users: tenantSlug now comes from the trusted `tenant_slug`
+      //   token claim (set in verifyToken). We do NOT override it from the request,
+      //   otherwise a user could reach another tenant's subdomain (cross-tenant access).
+      // - Platform users (platform_admin) don't belong to a tenant, so their token
+      //   carries no tenant_slug; for them we resolve the tenant context from the
+      //   request (subdomain / X-Tenant-Slug header) to allow legitimate tenant switching.
       if (!payload.tenantSlug) {
-        payload.tenantSlug = resolveTenantSlug(request);
+        if (payload.role === 'platform_admin') {
+          payload.tenantSlug = resolveTenantSlug(request);
+        } else {
+          // Non-platform user without a tenant claim → cannot be bound to any tenant.
+          return reply.status(403).send({
+            statusCode: 403,
+            code: 'TENANT_UNRESOLVED',
+            message: 'El usuario no tiene un tenant asignado',
+            timestamp: new Date().toISOString(),
+            requestId: request.id,
+          });
+        }
       }
 
       request.user = payload;

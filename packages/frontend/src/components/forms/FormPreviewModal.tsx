@@ -44,7 +44,7 @@ export default function FormPreviewModal({ formId, formName, onClose }: FormPrev
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-gray-800">{formName}</h2>
-            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
+            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
               Solo vista previa
             </span>
           </div>
@@ -76,7 +76,7 @@ export default function FormPreviewModal({ formId, formName, onClose }: FormPrev
         <div className="flex items-center justify-end px-6 py-4 border-t">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
           >
             Cerrar
           </button>

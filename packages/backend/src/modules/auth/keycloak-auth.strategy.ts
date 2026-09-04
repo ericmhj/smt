@@ -33,11 +33,15 @@ export class KeycloakAuthStrategy implements AuthStrategy {
 
       const role = roles[0] || 'tecnico'; // Default role if none found
 
+      // Authoritative tenant binding from the trusted token claim (mikel-crm realm
+      // maps the user's `tenant_slug` attribute here). Empty for platform users.
+      const tenantSlug = (payload.tenant_slug as string) || '';
+
       return {
         sub: payload.sub as string,
         role,
         tenantId: (payload.tenant_id as string) || '',
-        tenantSlug: '', // Will be resolved by tenant middleware from X-Tenant-Slug header or DB lookup
+        tenantSlug,
         iat: payload.iat as number,
         exp: payload.exp as number,
         jti: payload.jti as string,

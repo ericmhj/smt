@@ -226,7 +226,7 @@ export default function ComplianceSummaryModal({
                         {summary.puntosFueraCumplimiento.map((punto) => (
                           <tr
                             key={punto.puntoId}
-                            className={`border-t ${selectedPoints.has(punto.puntoId) ? 'bg-amber-50' : ''}`}
+                            className={`border-t ${selectedPoints.has(punto.puntoId) ? 'bg-blue-50' : ''}`}
                           >
                             <td className="px-3 py-2">
                               <input
@@ -263,8 +263,8 @@ export default function ComplianceSummaryModal({
                     </table>
                   </div>
 
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-                    <p className="text-xs text-amber-800">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <p className="text-xs text-blue-800">
                       <strong>Estudio Complementario:</strong> Se creará una nueva tarjeta con estado
                       &quot;Programada&quot; y fecha de ejecución a 10 días hábiles. Incluirá solo los
                       puntos seleccionados con sus matrices y estructura original, y una anotación
@@ -302,7 +302,7 @@ export default function ComplianceSummaryModal({
               <button
                 onClick={handleCreateStudy}
                 disabled={creating || selectedPoints.size === 0}
-                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {creating ? 'Creando...' : '🔄 Crear Estudio Complementario'}
               </button>

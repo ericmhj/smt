@@ -44,6 +44,7 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
   );
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPasswordWarning, setShowPasswordWarning] = useState(false);
 
   // Update full email when prefix changes
   const handleEmailPrefixChange = (prefix: string) => {
@@ -51,17 +52,16 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
     setFormData({ ...formData, email: prefix ? `${prefix}${tenantDomain}` : '' });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Sends the form data to the API. Password is stripped when empty (edit mode).
+  const submitForm = async () => {
     setError('');
-    setLoading(true);
+    const data = { ...formData };
+    if (!data.password || data.password.trim() === '') {
+      delete data.password;
+    }
 
+    setLoading(true);
     try {
-      const data = { ...formData };
-      // Don't send password if empty or whitespace-only (edit mode)
-      if (!data.password || data.password.trim() === '') {
-        delete data.password;
-      }
       await onSubmit(data);
       router.push('/users');
     } catch (err) {
@@ -71,7 +71,28 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    // When editing and changing the password, warn that all active sessions
+    // for this user will be closed and they will need to sign in again.
+    const isPasswordChange = isEdit && !!formData.password && formData.password.trim() !== '';
+    if (isPasswordChange) {
+      setShowPasswordWarning(true);
+      return;
+    }
+
+    await submitForm();
+  };
+
+  const confirmPasswordChange = async () => {
+    setShowPasswordWarning(false);
+    await submitForm();
+  };
+
   return (
+    <>
     <form onSubmit={handleSubmit} className="max-w-lg space-y-4">
       {error && (
         <div className="bg-red-50 text-red-600 text-sm p-3 rounded-md">{error}</div>
@@ -155,5 +176,52 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
         </button>
       </div>
     </form>
+
+    {showPasswordWarning && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pwd-warning-title"
+      >
+        <div className="w-full max-w-md rounded-lg bg-white shadow-xl border-t-4 border-blue-600">
+          <div className="flex items-start gap-4 p-6">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-100">
+              <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 id="pwd-warning-title" className="text-base font-semibold text-gray-900">
+                Cambiar contraseña
+              </h3>
+              <p className="mt-2 text-sm text-gray-600">
+                Al cambiar la contraseña se cerrarán todas las sesiones activas de este usuario
+                y deberá iniciar sesión nuevamente. ¿Deseas continuar?
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
+            <button
+              type="button"
+              onClick={() => setShowPasswordWarning(false)}
+              disabled={loading}
+              className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={confirmPasswordChange}
+              disabled={loading}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Guardando...' : 'Sí, cambiar contraseña'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

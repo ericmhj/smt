@@ -27,6 +27,7 @@ export interface KeycloakClaims {
   name?: string;
   email?: string;
   tenantId?: string;
+  tenantSlug?: string;
 }
 
 /**
@@ -103,6 +104,46 @@ export class KeycloakClient {
 
     const data = (await response.json()) as KeycloakTokenResponse;
     return data;
+  }
+
+  /**
+   * Checks with Keycloak whether an access token is still active (RFC 7662
+   * token introspection). Returns false if the token was revoked (e.g. the
+   * user's sessions were logged out after a password change), even if the JWT
+   * itself has not expired yet.
+   *
+   * On network/service errors this returns `true` (fail-open) so that a
+   * transient Keycloak outage does not lock out all users; local JWT signature
+   * + expiry validation still applies as the primary guard.
+   */
+  async isTokenActive(accessToken: string): Promise<boolean> {
+    const introspectUrl = `${this.config.tokenUrl}/introspect`;
+
+    const body = new URLSearchParams({
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret,
+      token: accessToken,
+    });
+
+    try {
+      const response = await fetch(introspectUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+        signal: AbortSignal.timeout(5_000),
+      });
+
+      if (!response.ok) {
+        // Introspection endpoint error — do not hard-fail auth on this alone.
+        return true;
+      }
+
+      const data = (await response.json()) as { active?: boolean };
+      return data.active === true;
+    } catch {
+      // Network/timeout — fail-open (see docstring).
+      return true;
+    }
   }
 
   /**
@@ -196,6 +237,7 @@ export class KeycloakClient {
       name: payload.name || payload.preferred_username || undefined,
       email: payload.email || undefined,
       tenantId: payload.tenant_id || payload.tenantId || undefined,
+      tenantSlug: payload.tenant_slug || payload.tenantSlug || undefined,
     };
   }
 }

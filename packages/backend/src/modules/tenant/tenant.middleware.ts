@@ -159,9 +159,23 @@ async function tenantMiddlewarePlugin(fastify: FastifyInstance): Promise<void> {
         tenantSlug = headerSlug;
       }
     } else if (request.user && request.user.role !== 'platform_admin') {
-      // If JWT already provided a tenantSlug, reject mismatching X-Tenant-Slug headers
+      // The JWT provided the authoritative tenantSlug. For non-platform users we must
+      // reject any attempt to operate on a DIFFERENT tenant, whether it comes via the
+      // X-Tenant-Slug header or via the Host subdomain. This prevents cross-tenant access
+      // (e.g. a user of tenant "el-reloj" reaching the "padsa" subdomain).
       const headerSlug = request.headers['x-tenant-slug'] as string | undefined;
       if (headerSlug && headerSlug !== tenantSlug && headerSlug !== 'default') {
+        return reply.status(403).send({
+          statusCode: 403,
+          code: 'TENANT_MISMATCH',
+          message: 'No tiene permisos para acceder a este tenant',
+          timestamp: new Date().toISOString(),
+          requestId: request.id,
+        });
+      }
+
+      const subdomainSlug = extractSubdomain(request.headers.host);
+      if (subdomainSlug && subdomainSlug !== tenantSlug && subdomainSlug !== DEFAULT_TENANT_SLUG) {
         return reply.status(403).send({
           statusCode: 403,
           code: 'TENANT_MISMATCH',

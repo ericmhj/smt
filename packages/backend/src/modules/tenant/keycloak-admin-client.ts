@@ -242,6 +242,35 @@ export class KeycloakAdminClient {
   }
 
   /**
+   * Revokes ALL active sessions for a user in Keycloak.
+   * This invalidates their refresh tokens and forces re-authentication.
+   * Used after a password change to expel active sessions.
+   *
+   * Note: short-lived access tokens already issued remain valid until they
+   * expire (a few minutes), but they can no longer be refreshed.
+   */
+  async logoutUser(userId: string): Promise<void> {
+    const token = await this.getAdminToken();
+
+    const url = `${this.config.baseUrl}/admin/realms/${this.config.realm}/users/${userId}/logout`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `[KeycloakAdmin] Error revoking sessions for user ${userId}: ${response.status} - ${errorText}`,
+      );
+    }
+  }
+
+  /**
    * Search for a user by email and return their Keycloak ID.
    */
   async getUserIdByEmail(email: string, token?: string): Promise<string | null> {

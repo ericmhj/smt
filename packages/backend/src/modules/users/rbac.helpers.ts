@@ -2,15 +2,19 @@ import type { Role } from './user.types.js';
 
 /**
  * Role hierarchy: defines which roles each role can manage.
- * - superusuario can manage: admin, manager, tecnico
- * - admin can manage: manager, tecnico
- * - manager and tecnico cannot manage any users
+ * Kept in sync with the hierarchy in user.service.ts (single source of truth).
+ * - platform_admin can manage: superusuario, admin, manager, tecnico, asistente
+ * - superusuario can manage: admin, manager, tecnico, asistente
+ * - admin can manage: admin (peers), manager, tecnico, asistente
+ * - manager, tecnico, asistente cannot manage any users
  */
 export const ROLE_HIERARCHY: Record<Role, Role[]> = {
-  superusuario: ['admin', 'manager', 'tecnico'],
-  admin: ['manager', 'tecnico'],
+  platform_admin: ['superusuario', 'admin', 'manager', 'tecnico', 'asistente'],
+  superusuario: ['admin', 'manager', 'tecnico', 'asistente'],
+  admin: ['admin', 'manager', 'tecnico', 'asistente'],
   manager: [],
   tecnico: [],
+  asistente: [],
 };
 
 /**

@@ -83,6 +83,15 @@ export class IntegratedAuthStrategy implements AuthStrategy {
         issuer: this.issuer,
       });
 
+      // Ensure the Keycloak session behind this token is still active. This
+      // makes session revocation (e.g. after a password change) take effect
+      // immediately, instead of waiting for the short-lived access token to
+      // expire. Fail-open on Keycloak outages (see KeycloakClient.isTokenActive).
+      const active = await this.keycloakClient.isTokenActive(token);
+      if (!active) {
+        throw new AuthError(401, 'AUTH_004', 'Sesión finalizada, inicie sesión nuevamente');
+      }
+
       const roles: string[] =
         (payload.roles as string[]) ||
         (payload.realm_access as { roles: string[] })?.roles ||
@@ -93,16 +102,26 @@ export class IntegratedAuthStrategy implements AuthStrategy {
       const appRoles = roles.filter((r) => APP_ROLES.includes(r));
       const role = appRoles[0] || roles[0] || 'tecnico';
 
+      // Read the tenant the user actually belongs to from the trusted token claim.
+      // Keycloak maps the user's `tenant_slug` attribute into this claim (mikel-crm realm).
+      // This is the authoritative tenant binding — it must NOT be overridden by the
+      // request subdomain/header for non-platform_admin users (see tenant.middleware).
+      const tenantSlug = (payload.tenant_slug as string) || '';
+
       return {
         sub: payload.sub as string,
         role,
         tenantId: (payload.tenant_id as string) || '',
-        tenantSlug: '',
+        tenantSlug,
         iat: payload.iat as number,
         exp: payload.exp as number,
         jti: payload.jti as string,
       };
     } catch (error: any) {
+      // Preserve explicit auth errors (e.g. revoked session) with their message.
+      if (error instanceof AuthError) {
+        throw error;
+      }
       if (error?.code === 'ERR_JWT_EXPIRED') {
         throw new AuthError(401, 'AUTH_002', 'Token expirado');
       }
@@ -181,27 +200,31 @@ export class IntegratedAuthStrategy implements AuthStrategy {
     const isPlatformAdmin = claims.roles?.includes('platform_admin');
 
     if (!isPlatformAdmin) {
+      // SECURITY (tenant isolation): the tenant the user belongs to comes from the
+      // trusted `tenant_slug` token claim. A regular user may ONLY log into the
+      // subdomain of their own tenant. This is the authoritative check that prevents
+      // cross-tenant access (e.g. a user of "el-reloj" logging into "padsa").
+      if (!claims.tenantSlug || claims.tenantSlug !== tenantSlug) {
+        throw new AuthError(403, 'USER_NOT_IN_TENANT', 'Acceso denegado, dominio indefinido');
+      }
+
+      // Defense in depth: the user must also exist and be active in the tenant schema,
+      // matched strictly by their Keycloak subject id (no cross-schema email fallback).
       const schemaName = toSchemaName(tenantSlug);
       const sql = getSqlClient();
-
+      let userExists = false;
       try {
         await sql.unsafe(`SET search_path TO ${schemaName}, public`);
         const userInTenant = await sql`
           SELECT id FROM users WHERE id = ${claims.sub} AND is_active = true LIMIT 1
         `;
-        if (userInTenant.length === 0) {
-          const userByEmail = await sql`
-            SELECT id FROM users WHERE email = ${claims.email || credentials.email} AND is_active = true LIMIT 1
-          `;
-          if (userByEmail.length === 0) {
-            await sql.unsafe(`SET search_path TO public`);
-            throw new AuthError(403, 'USER_NOT_IN_TENANT', 'Acceso denegado, dominio indefinido');
-          }
-        }
+        userExists = userInTenant.length > 0;
+      } finally {
         await sql.unsafe(`SET search_path TO public`);
-      } catch (err) {
-        if (err instanceof AuthError) throw err;
-        console.warn(`[IntegratedAuth] User-in-tenant check failed: ${err instanceof Error ? err.message : 'unknown'}`);
+      }
+
+      if (!userExists) {
+        throw new AuthError(403, 'USER_NOT_IN_TENANT', 'Acceso denegado, dominio indefinido');
       }
     }
 
