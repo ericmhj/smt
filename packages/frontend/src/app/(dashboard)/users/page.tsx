@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { getSelectableRoleOptions } from '@/lib/roles';
 import UserTable, { UserRow } from '@/components/users/UserTable';
 
 export default function UsersPage() {
@@ -10,6 +11,9 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [roleFilter, setRoleFilter] = useState('');
   const [activeFilter, setActiveFilter] = useState('');
+
+  // Load the selectable roles for the filter (discards 'superusuario').
+  const roleOptions = getSelectableRoleOptions();
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -69,11 +73,11 @@ export default function UsersPage() {
           className="px-3 py-2 border border-gray-300 rounded-md text-sm"
         >
           <option value="">Todos los roles</option>
-          <option value="superusuario">Superusuario</option>
-          <option value="admin">Administrador</option>
-          <option value="manager">Manager</option>
-          <option value="tecnico">Técnico</option>
-          <option value="asistente">Asistente</option>
+          {roleOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
 
         <select

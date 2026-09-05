@@ -13,12 +13,12 @@ services:
       FRONTEND_URL: http://localhost:3000
       DATABASE_URL: postgresql://sgr:sgr_dev_password@postgres:5432/sgr_dev
       REDIS_URL: redis://:sgr_redis_dev@redis:6379
-      MINIO_ENDPOINT: http://garage:3900
-      MINIO_ACCESS_KEY: GKed5537444c2e84eb01b9fa34
-      MINIO_SECRET_KEY: 85dc8299f8dfde6f3ca5549fd3380c799df0c123936bd37795a5d1eb04f55246
-      MINIO_BUCKET: sgr-files
-      MINIO_USE_SSL: "false"
-      MINIO_REGION: garage
+      GARAGE_ENDPOINT: http://garage:3900
+      GARAGE_ACCESS_KEY: GKed5537444c2e84eb01b9fa34
+      GARAGE_SECRET_KEY: 85dc8299f8dfde6f3ca5549fd3380c799df0c123936bd37795a5d1eb04f55246
+      GARAGE_BUCKET: sgr-files
+      GARAGE_USE_SSL: "false"
+      GARAGE_REGION: garage
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
       CLAMAV_TIMEOUT: "30000"
@@ -30,6 +30,26 @@ services:
       SIGNATURE_HMAC_SECRET: dev-hmac-secret-change-in-production
       MAX_FILE_SIZE_MB: "10"
       LOG_LEVEL: debug
+      # ── Modo integrado (Keycloak + Kafka + License Service) ──────────────
+      # Habilita la autenticación con Keycloak y el consumer de eventos de
+      # ciclo de vida de tenants publicados por el license-service.
+      STANDALONE_AUTH: "false"
+      KEYCLOAK_TOKEN_URL: http://keycloak:8080/realms/mikel-crm/protocol/openid-connect/token
+      KEYCLOAK_CLIENT_ID: mikel-crm-test
+      KEYCLOAK_CLIENT_SECRET: test-client-secret-dev
+      # JWKS por el host interno (alcanzable desde el contenedor).
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/mikel-crm/protocol/openid-connect/certs
+      # ISSUER debe coincidir EXACTAMENTE con el claim 'iss' del token, que
+      # Keycloak emite con su hostname público (KC_HOSTNAME=localhost:8180).
+      KEYCLOAK_ISSUER: http://localhost:8180/realms/mikel-crm
+      KAFKA_BROKERS: license-kafka:9092
+      KAFKA_TOPIC: license-events
+      LICENSE_SERVICE_URL: http://license-app:8080
+      KEYCLOAK_ADMIN_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN_REALM: master
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: Admin_Dev_2026!
+      KEYCLOAK_TARGET_REALM: mikel-crm
     volumes:
       - jwt_keys:/app/keys
     depends_on:
@@ -50,6 +70,7 @@ services:
     networks:
       - sgr-network
       - keycloak-external
+      - mikel-net
 
   frontend:
     build:
@@ -187,6 +208,13 @@ volumes:
 networks:
   sgr-network:
     driver: bridge
+  # Red compartida creada por el stack de Keycloak (Integrator). Se declara
+  # externa para NO intentar recrearla y evitar conflictos de conexión.
   keycloak-external:
     name: keycloak-external
-    driver: bridge
+    external: true
+  # Red compartida creada por el stack del license-service (Kafka, license-app).
+  # Externa: el consumer de SMT la usa para alcanzar license-kafka y license-app.
+  mikel-net:
+    name: mikel-net
+    external: true

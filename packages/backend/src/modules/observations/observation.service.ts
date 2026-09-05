@@ -5,7 +5,7 @@ import { observations, observationFiles } from '../../db/schema/observations.js'
 import { reactivos } from '../../db/schema/reactivos.js';
 import { ObservationError, ObservationErrorCode } from './observation.errors.js';
 import { FileValidation } from './file-validation.js';
-import { uploadFile } from '../../lib/minio.js';
+import { uploadFile } from '../../lib/garage.js';
 import { sanitizeFilename } from '../../lib/tenant-schema.js';
 import type {
   ObservationRecord,

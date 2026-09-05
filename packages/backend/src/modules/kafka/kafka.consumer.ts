@@ -151,8 +151,12 @@ export class TenantLifecycleConsumer {
     }
 
     try {
-      const event = JSON.parse(message.value.toString()) as TenantLifecycleEvent;
-      console.log(`[KafkaConsumer] Evento recibido: ${event.type} (slug: ${event.slug})`);
+      const event = JSON.parse(message.value.toString()) as any;
+      // El license-service envía el evento envuelto ({ eventType, payload })
+      // o en formato plano ({ type, slug }). Solo para el log informativo.
+      const logType = event.eventType ?? event.type ?? 'unknown';
+      const logSlug = event.slug ?? event.payload?.slug ?? event.payload?.tenantId ?? 'n/a';
+      console.log(`[KafkaConsumer] Evento recibido: ${logType} (slug: ${logSlug})`);
 
       if (this.handler) {
         await this.handler(event);

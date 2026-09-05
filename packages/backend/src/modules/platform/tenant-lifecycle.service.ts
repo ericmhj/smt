@@ -6,7 +6,7 @@ import { getSqlClient } from '../../db/index.js';
 import { tenants } from '../../db/schema/platform.js';
 import { applySchemaTemplate } from '../../db/apply-schema-template.js';
 import { getRedisClient } from '../../lib/redis.js';
-import { deleteAllWithPrefix } from '../../lib/minio.js';
+import { deleteAllWithPrefix } from '../../lib/garage.js';
 import type { KeycloakAdminClient } from '../tenant/keycloak-admin-client.js';
 import { toSchemaName } from '../../lib/tenant-schema.js';
 

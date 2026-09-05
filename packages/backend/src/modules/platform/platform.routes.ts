@@ -5,6 +5,8 @@ import type { Database } from '../../db/index.js';
 import { getSqlClient } from '../../db/index.js';
 import { tenants } from '../../db/schema/platform.js';
 import { TenantLifecycleService, TenantLifecycleError } from './tenant-lifecycle.service.js';
+import { TenantReconcileService } from './tenant-reconcile.service.js';
+import { TenantProvisioningService } from '../tenant/tenant-provisioning.service.js';
 import type { KeycloakAdminClient } from '../tenant/keycloak-admin-client.js';
 import { toSchemaName } from '../../lib/tenant-schema.js';
 
@@ -141,12 +143,54 @@ function requirePlatformAdmin(request: FastifyRequest, reply: FastifyReply, done
 
 export async function platformRoutes(
   fastify: FastifyInstance,
-  opts: { db: Database; keycloakAdmin?: KeycloakAdminClient; standaloneAuth?: boolean },
+  opts: {
+    db: Database;
+    keycloakAdmin?: KeycloakAdminClient;
+    standaloneAuth?: boolean;
+    licenseService?: {
+      baseUrl: string;
+      timeoutMs: number;
+      gatewaySecret: string;
+      gatewayRole: string;
+    };
+  },
 ): Promise<void> {
   const lifecycleService = new TenantLifecycleService(opts.db, opts.keycloakAdmin);
 
   // All platform routes require platform_admin role
   fastify.addHook('preHandler', requirePlatformAdmin);
+
+  // POST /api/platform/tenants/reconcile — Reconciliación masiva desde el
+  // license-service (fuente de verdad). Materializa en SMT los tenants que
+  // falten, sin depender de Kafka. Red de seguridad ante fallos de red/eventos.
+  fastify.post('/api/platform/tenants/reconcile', async (_request: FastifyRequest, reply: FastifyReply) => {
+    if (!opts.licenseService?.baseUrl) {
+      return reply.status(503).send({
+        statusCode: 503,
+        code: 'RECONCILE_UNAVAILABLE',
+        message: 'La reconciliación requiere el modo integrado (LICENSE_SERVICE_URL no configurado)',
+      });
+    }
+
+    try {
+      const provisioning = new TenantProvisioningService(opts.db, opts.keycloakAdmin ?? null);
+      const reconcile = new TenantReconcileService(opts.db, provisioning, {
+        licenseServiceUrl: opts.licenseService.baseUrl,
+        gatewaySecret: opts.licenseService.gatewaySecret,
+        gatewayRole: opts.licenseService.gatewayRole,
+        timeoutMs: opts.licenseService.timeoutMs,
+      });
+      const result = await reconcile.reconcileAll();
+      return reply.status(200).send(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      return reply.status(502).send({
+        statusCode: 502,
+        code: 'RECONCILE_FAILED',
+        message: `Error reconciliando con el license-service: ${message}`,
+      });
+    }
+  });
 
   // POST /api/platform/get-tenant-form — Get a specific tenant form with HTML (uses POST to avoid route conflicts)
   fastify.post('/api/platform/get-tenant-form', async (request, reply) => {

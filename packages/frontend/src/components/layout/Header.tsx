@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/hooks/useNotifications';
+import { getStoredTenant } from '@/lib/token-storage';
 import NotificationBadge from '@/components/notifications/NotificationBadge';
 import NotificationPanel from '@/components/notifications/NotificationPanel';
 
@@ -18,13 +19,21 @@ export default function Header() {
   const { user, logout } = useAuth();
   const { notifications, unreadCount, markAsRead } = useNotifications();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [tenantName, setTenantName] = useState('');
+
+  useEffect(() => {
+    setTenantName(getStoredTenant()?.nombre || '');
+  }, []);
 
   if (!user) return null;
 
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-      <div />
-      <div className="flex items-center gap-4">
+      <div className="flex-1" />
+      <p className="flex-1 text-center text-3xl font-bold text-gray-800 truncate">
+        {tenantName}
+      </p>
+      <div className="flex flex-1 items-center justify-end gap-4">
         <div className="relative">
           <NotificationBadge
             count={unreadCount}

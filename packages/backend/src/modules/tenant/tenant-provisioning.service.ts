@@ -124,8 +124,12 @@ export class TenantProvisioningService {
         console.log(`[TenantProvisioning] Creando usuario '${admin_email}' en Keycloak antes de la transacción DB...`);
         const kcUserId = await this.keycloakAdmin.createUser({
           email: admin_email,
-          password: admin_email, // Temporary password = email; user must change on first login
-          temporary: true,
+          // Contraseña inicial = email. NO temporal: con temporary=true Keycloak
+          // marca UPDATE_PASSWORD como acción requerida y el login por Direct
+          // Access Grant falla ("credenciales inválidas"). Consistente con el
+          // flujo TenantLifecycleService.createTenant (temporary: false).
+          password: admin_email,
+          temporary: false,
           tenantSlug: slug,
           roles: ['admin'],
         });
@@ -159,9 +163,13 @@ export class TenantProvisioningService {
         // plan/status/config se pueblan desde el evento (fuente de verdad).
         const tenantId = randomUUID();
         const hashId = generateTenantHashId(slug);
+        // config se serializa a texto y se castea a jsonb en el SQL. Evita el
+        // helper sql.json() (que dentro de tx transaccional pasa el objeto crudo
+        // y provoca "Received an instance of Object").
+        const configJson = JSON.stringify(config ?? {});
         await tx`
           INSERT INTO public.tenants (id, license_tenant_id, hash_id, slug, nombre, plan, status, config)
-          VALUES (${tenantId}, ${licenseTenantId}, ${hashId}, ${slug}, ${nombre}, ${plan}, ${status}, ${tx.json(config)})
+          VALUES (${tenantId}, ${licenseTenantId}, ${hashId}, ${slug}, ${nombre}, ${plan}, ${status}, ${configJson}::jsonb)
         `;
 
         // 4. Create admin user in the tenant schema using the Keycloak UUID.
@@ -182,6 +190,7 @@ export class TenantProvisioningService {
     } catch (error) {
       // Structured error logging for operator diagnosis
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      const errorStack = error instanceof Error ? error.stack : undefined;
       console.error(JSON.stringify({
         level: 'error',
         service: 'TenantProvisioning',
@@ -190,6 +199,7 @@ export class TenantProvisioningService {
         schemaName,
         eventType: event.type,
         error: errorMessage,
+        stack: errorStack,
         message: `[TenantProvisioning] Error provisionando tenant '${slug}': ${errorMessage}`,
       }));
 

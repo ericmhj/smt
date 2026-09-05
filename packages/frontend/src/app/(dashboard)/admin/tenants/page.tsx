@@ -27,16 +27,23 @@ interface TenantsResponse {
   };
 }
 
-const statusStyles: Record<string, string> = {
-  active: 'bg-green-100 text-green-800 hover:bg-green-200',
-  suspended: 'bg-red-100 text-red-800 hover:bg-red-200',
-  pending_deletion: 'bg-red-100 text-red-800 hover:bg-red-200',
+// Estado homologado a solo dos valores visibles: Activo o Suspendido.
+// Cualquier estado que no sea 'active' se muestra como Suspendido
+// (incluye suspended, onboarding, cancelled, pending_deletion).
+// La etiqueta es SOLO informativa: refleja el estado sincronizado desde el
+// license-service (pago mensual del tenant). No invoca ninguna acción.
+function normalizeStatus(status: string): 'active' | 'suspended' {
+  return status === 'active' ? 'active' : 'suspended';
+}
+
+const statusStyles: Record<'active' | 'suspended', string> = {
+  active: 'bg-green-100 text-green-800',
+  suspended: 'bg-red-100 text-red-800',
 };
 
-const statusLabels: Record<string, string> = {
+const statusLabels: Record<'active' | 'suspended', string> = {
   active: 'Activo',
-  suspended: 'Inactivo',
-  pending_deletion: 'Inactivo',
+  suspended: 'Suspendido',
 };
 
 export default function TenantsPage() {
@@ -55,18 +62,28 @@ export default function TenantsPage() {
     }
   };
 
+  const [reconciling, setReconciling] = useState(false);
+
   useEffect(() => { fetchTenants(); }, []);
 
-  const handleToggleStatus = async (tenant: Tenant) => {
+  const handleReconcile = async () => {
+    setReconciling(true);
     try {
-      if (tenant.status === 'active') {
-        await api(`/api/platform/tenants/${tenant.id}/suspend`, { method: 'PUT' });
-      } else {
-        await api(`/api/platform/tenants/${tenant.id}/activate`, { method: 'PUT' });
-      }
+      const result = await api<{ created: string[]; skipped: number; failed: Array<{ slug: string; error: string }> }>(
+        '/api/platform/tenants/reconcile',
+        { method: 'POST' },
+      );
+      const createdCount = result.created?.length ?? 0;
+      const failedCount = result.failed?.length ?? 0;
+      alert(
+        `Reconciliación completada.\nCreados: ${createdCount}\nSin cambios: ${result.skipped ?? 0}\nFallidos: ${failedCount}` +
+          (failedCount > 0 ? `\n\nFallidos:\n${result.failed.map((f) => `- ${f.slug}: ${f.error}`).join('\n')}` : ''),
+      );
       await fetchTenants();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al cambiar estado');
+      alert(err instanceof Error ? err.message : 'Error al reconciliar');
+    } finally {
+      setReconciling(false);
     }
   };
 
@@ -77,18 +94,28 @@ export default function TenantsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Gestión de Tenants</h1>
           <p className="text-sm text-gray-500 mt-1">Administra las organizaciones de la plataforma</p>
         </div>
-        <Link
-          href="/admin/tenants/nuevo"
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
-        >
-          Crear Tenant
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleReconcile}
+            disabled={reconciling}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium disabled:opacity-50"
+            title="Materializa en SMT los tenants que existan en el sistema de licencias pero falten aquí"
+          >
+            {reconciling ? 'Reconciliando...' : 'Reconciliar'}
+          </button>
+          <Link
+            href="/admin/tenants/nuevo"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            Crear Tenant
+          </Link>
+        </div>
       </div>
 
       {loading ? (
         <div className="text-center py-8 text-gray-500">Cargando...</div>
       ) : (
-        <TenantsDataTable tenants={tenants} onToggleStatus={handleToggleStatus} />
+        <TenantsDataTable tenants={tenants} />
       )}
     </div>
   );
@@ -98,13 +125,7 @@ export default function TenantsPage() {
 
 const tenantColumnHelper = createColumnHelper<Tenant>();
 
-function TenantsDataTable({
-  tenants,
-  onToggleStatus,
-}: {
-  tenants: Tenant[];
-  onToggleStatus: (t: Tenant) => void;
-}) {
+function TenantsDataTable({ tenants }: { tenants: Tenant[] }) {
   const columns = useMemo(() => [
     tenantColumnHelper.accessor('hashId', {
       header: 'ID',
@@ -145,19 +166,19 @@ function TenantsDataTable({
     tenantColumnHelper.accessor('status', {
       header: 'Estado',
       filterFn: (row, _columnId, filterValue) => {
-        const label = statusLabels[row.original.status] || row.original.status;
+        const label = statusLabels[normalizeStatus(row.original.status)];
         return label.toLowerCase().startsWith(filterValue.toLowerCase());
       },
       cell: (info) => {
-        const t = info.row.original;
+        const normalized = normalizeStatus(info.row.original.status);
         return (
-          <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusStyles[t.status] || 'bg-gray-100 text-gray-800'}`}>
-            {statusLabels[t.status] || t.status}
+          <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusStyles[normalized]}`}>
+            {statusLabels[normalized]}
           </span>
         );
       },
     }),
-  ], [onToggleStatus]);
+  ], []);
 
   return <DataTable data={tenants} columns={columns} columnFiltering globalFilter={false} />;
 }

@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import type { Database } from '../../db/index.js';
 import { reactivos } from '../../db/schema/reactivos.js';
-import { uploadFile, getFileUrl } from '../../lib/minio.js';
+import { uploadFile, getFileUrl } from '../../lib/garage.js';
 import { PDFService } from './pdf.service.js';
 import { toSchemaName } from '../../lib/tenant-schema.js';
 

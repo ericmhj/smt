@@ -1,22 +1,33 @@
 import * as Minio from 'minio';
 import { Readable } from 'node:stream';
 
-const endpoint = (process.env.MINIO_ENDPOINT || 'http://localhost:3900').replace(/^https?:\/\//, '');
+/**
+ * Cliente de almacenamiento de objetos S3-compatible.
+ *
+ * El proveedor es Garage (dxflrs/garage), auto-hospedado y compatible con el
+ * protocolo S3. Se usa la librería cliente `minio` únicamente como SDK S3;
+ * el servidor NO es MinIO. La nomenclatura de este módulo usa "Garage" para
+ * evitar confusiones.
+ *
+ * Configuración vía variables de entorno GARAGE_* (con compatibilidad hacia
+ * atrás con las antiguas MINIO_* mientras se migran los entornos).
+ */
+const endpoint = (process.env.GARAGE_ENDPOINT || process.env.MINIO_ENDPOINT || 'http://localhost:3900').replace(/^https?:\/\//, '');
 const portMatch = endpoint.match(/:(\d+)$/);
 const host = portMatch ? endpoint.replace(`:${portMatch[1]}`, '') : endpoint;
 const port = portMatch ? parseInt(portMatch[1], 10) : 3900;
 
-const minioClient = new Minio.Client({
+const garageClient = new Minio.Client({
   endPoint: host,
   port,
-  useSSL: process.env.MINIO_USE_SSL === 'true',
-  accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
-  secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
-  region: process.env.MINIO_REGION || 'garage',
+  useSSL: (process.env.GARAGE_USE_SSL ?? process.env.MINIO_USE_SSL) === 'true',
+  accessKey: process.env.GARAGE_ACCESS_KEY || process.env.MINIO_ACCESS_KEY || 'garage',
+  secretKey: process.env.GARAGE_SECRET_KEY || process.env.MINIO_SECRET_KEY || 'garage',
+  region: process.env.GARAGE_REGION || process.env.MINIO_REGION || 'garage',
   pathStyle: true,
 });
 
-const BUCKET = process.env.MINIO_BUCKET || 'sgr-files';
+const BUCKET = process.env.GARAGE_BUCKET || process.env.MINIO_BUCKET || 'sgr-files';
 
 /**
  * Constructs a tenant-namespaced storage key.
@@ -27,7 +38,7 @@ export function tenantStorageKey(slug: string, path: string): string {
 }
 
 /**
- * Upload a file to MinIO/Garage.
+ * Upload a file to Garage (S3-compatible object storage).
  * If tenantSlug is provided, the key is prefixed with the tenant slug.
  */
 export async function uploadFile(
@@ -37,7 +48,7 @@ export async function uploadFile(
   tenantSlug?: string,
 ): Promise<void> {
   const finalKey = tenantSlug ? tenantStorageKey(tenantSlug, key) : key;
-  await minioClient.putObject(BUCKET, finalKey, buffer, buffer.length, {
+  await garageClient.putObject(BUCKET, finalKey, buffer, buffer.length, {
     'Content-Type': mimeType,
   });
 }
@@ -60,16 +71,16 @@ export async function getFileUrl(
     finalKey = tenantStorageKey('default', key);
   }
 
-  return minioClient.presignedGetObject(BUCKET, finalKey, expiresIn);
+  return garageClient.presignedGetObject(BUCKET, finalKey, expiresIn);
 }
 
 /**
- * Delete a file from MinIO/Garage.
+ * Delete a file from Garage (S3-compatible object storage).
  * If tenantSlug is provided, the key is prefixed with the tenant slug.
  */
 export async function deleteFile(key: string, tenantSlug?: string): Promise<void> {
   const finalKey = tenantSlug ? tenantStorageKey(tenantSlug, key) : key;
-  await minioClient.removeObject(BUCKET, finalKey);
+  await garageClient.removeObject(BUCKET, finalKey);
 }
 
 /**
@@ -77,7 +88,7 @@ export async function deleteFile(key: string, tenantSlug?: string): Promise<void
  */
 export async function deleteAllWithPrefix(prefix: string): Promise<void> {
   const objectsList: string[] = [];
-  const stream = minioClient.listObjectsV2(BUCKET, prefix, true);
+  const stream = garageClient.listObjectsV2(BUCKET, prefix, true);
 
   await new Promise<void>((resolve, reject) => {
     stream.on('data', (obj) => {
@@ -88,7 +99,7 @@ export async function deleteAllWithPrefix(prefix: string): Promise<void> {
   });
 
   if (objectsList.length > 0) {
-    await minioClient.removeObjects(BUCKET, objectsList);
+    await garageClient.removeObjects(BUCKET, objectsList);
   }
 }
 
@@ -97,7 +108,7 @@ export async function deleteAllWithPrefix(prefix: string): Promise<void> {
  */
 export async function getFileStream(key: string, tenantSlug?: string): Promise<Readable> {
   const finalKey = tenantSlug ? tenantStorageKey(tenantSlug, key) : key;
-  return minioClient.getObject(BUCKET, finalKey);
+  return garageClient.getObject(BUCKET, finalKey);
 }
 
-export { minioClient, BUCKET };
+export { garageClient, BUCKET };

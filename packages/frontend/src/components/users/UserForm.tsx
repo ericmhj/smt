@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { getSelectableRoleOptions } from '@/lib/roles';
 
 interface UserFormData {
   email: string;
@@ -45,6 +46,9 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPasswordWarning, setShowPasswordWarning] = useState(false);
+
+  // Load the selectable roles for the form (discards 'superusuario').
+  const roleOptions = getSelectableRoleOptions();
 
   // Update full email when prefix changes
   const handleEmailPrefixChange = (prefix: string) => {
@@ -151,11 +155,11 @@ export default function UserForm({ initialData, isEdit, onSubmit }: UserFormProp
           onChange={(e) => setFormData({ ...formData, role: e.target.value })}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="tecnico">Técnico</option>
-          <option value="asistente">Asistente</option>
-          <option value="manager">Manager</option>
-          <option value="admin">Administrador</option>
-          <option value="superusuario">Superusuario</option>
+          {roleOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </div>
 

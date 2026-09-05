@@ -273,11 +273,21 @@ export class UserService {
     });
   }
 
-  async findAll(filters: UserFilters, tenantSlug: string): Promise<PaginatedResult<UserResponse>> {
+  async findAll(filters: UserFilters, tenantSlug: string, actorRole?: Role): Promise<PaginatedResult<UserResponse>> {
     return this.withKeycloakErrorHandling('findAll', { tenantSlug }, async () => {
       const page = filters.page ?? 1;
       const pageSize = filters.pageSize ?? 20;
       const first = (page - 1) * pageSize;
+
+      // Only a superusuario (or platform_admin) may see other superusuarios.
+      // For every other actor, exclude superusuario users from the result set.
+      const hideSuperusuario = actorRole !== 'superusuario' && actorRole !== 'platform_admin';
+
+      // If a lower-privileged actor explicitly filters by 'superusuario', there
+      // is nothing they are allowed to see: return an empty page.
+      if (hideSuperusuario && filters.role === 'superusuario') {
+        return { data: [], total: 0, page, pageSize, totalPages: 0 };
+      }
 
       const result = await this.keycloakAdmin.findUsers({
         tenantSlug,
@@ -288,14 +298,25 @@ export class UserService {
         max: pageSize,
       });
 
-      const data = result.users.map((user) => this.mapKeycloakUserToResponse(user));
+      let users = result.users;
+      let total = result.total;
+
+      if (hideSuperusuario) {
+        const filtered = users.filter(
+          (user) => !((user.attributes?.user_roles ?? []) as string[]).includes('superusuario'),
+        );
+        total -= users.length - filtered.length;
+        users = filtered;
+      }
+
+      const data = users.map((user) => this.mapKeycloakUserToResponse(user));
 
       return {
         data,
-        total: result.total,
+        total,
         page,
         pageSize,
-        totalPages: Math.ceil(result.total / pageSize),
+        totalPages: Math.ceil(total / pageSize),
       };
     });
   }

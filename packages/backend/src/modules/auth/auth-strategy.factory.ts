@@ -70,7 +70,8 @@ export async function createAuthStrategy(config: AppConfig): Promise<AuthStrateg
       keycloakJwksCacheTtl: config.keycloak!.jwksCacheTtl,
       licenseServiceBaseUrl: config.licenseService!.baseUrl,
       licenseServiceTimeoutMs: config.licenseService!.timeoutMs,
-      licenseServiceCircuitBreaker: config.licenseService!.circuitBreaker,
+      licenseServiceGatewaySecret: config.licenseService!.gatewaySecret,
+      licenseServiceGatewayRole: config.licenseService!.gatewayRole,
     });
   }
 }

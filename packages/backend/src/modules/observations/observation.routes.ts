@@ -11,7 +11,7 @@ import {
   fileIdParamSchema,
 } from './observation.schemas.js';
 import { observationFiles } from '../../db/schema/observations.js';
-import { getFileUrl } from '../../lib/minio.js';
+import { getFileUrl } from '../../lib/garage.js';
 import type { Database } from '../../db/index.js';
 import type { FileUploadData } from './observation.types.js';
 

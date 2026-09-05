@@ -67,8 +67,8 @@ export default function Sidebar() {
   return (
     <aside className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
       <div className="mb-8">
-        <h1 className="text-xl font-bold text-gray-800">SGR</h1>
-        <p className="text-xs text-gray-500">Sistema de Gestión de Ensayos</p>
+        <h1 className="text-xl font-bold text-gray-800">MikelCRM</h1>
+        <p className="text-xs text-gray-500">Cumplimiento de Normas Oficiales</p>
         <div className="mt-3 pt-3 border-t border-gray-100">
           <p className="text-sm font-medium text-gray-700 truncate">{user.name}</p>
           <p className="text-xs text-gray-500 capitalize">{user.role === 'platform_admin' ? 'Platform Admin' : user.role === 'tecnico' ? 'Técnico' : user.role === 'admin' ? 'Administrador' : user.role}</p>

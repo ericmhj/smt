@@ -39,15 +39,10 @@ pnpm db:migrate || echo "Migrations skipped (may need drizzle-kit generate first
 echo "Seeding database..."
 pnpm db:seed || echo "Seed skipped (may already exist)"
 
-# 7. Create MinIO bucket if not exists
-echo "Configuring MinIO bucket..."
-# Wait for MinIO
-sleep 3
-# Use mc (MinIO Client) if available, otherwise skip
-if command -v mc &> /dev/null; then
-  mc alias set sgr-minio http://minio:9000 sgr_minio_dev sgr_minio_dev_password 2>/dev/null || true
-  mc mb sgr-minio/sgr-files 2>/dev/null || true
-fi
+# 7. Object storage (Garage, S3-compatible)
+# El bucket 'sgr-files' lo aprovisiona el servicio 'garage-init' del
+# docker-compose.yml raíz. No se requiere configuración de MinIO aquí.
+echo "Object storage: Garage (bucket aprovisionado por garage-init)."
 
 echo ""
 echo "=== Setup Complete ==="
@@ -55,7 +50,7 @@ echo ""
 echo "Services available:"
 echo "  PostgreSQL: postgres:5432 (user: sgr, db: sgr_dev)"
 echo "  Redis:      redis:6379"
-echo "  MinIO:      minio:9000 (console: http://localhost:9001)"
+echo "  Garage(S3): garage:3900"
 echo "  ClamAV:     clamav:3310"
 echo ""
 echo "To start the backend:"

@@ -106,7 +106,19 @@ export async function buildApp(): Promise<FastifyInstance> {
     adminUser: config.keycloakAdmin?.adminUser ?? '',
     adminPassword: config.keycloakAdmin?.adminPassword ?? '',
   });
-  await app.register(platformRoutes, { db, keycloakAdmin, standaloneAuth: config.standaloneAuth });
+  await app.register(platformRoutes, {
+    db,
+    keycloakAdmin,
+    standaloneAuth: config.standaloneAuth,
+    licenseService: config.licenseService
+      ? {
+          baseUrl: config.licenseService.baseUrl,
+          timeoutMs: config.licenseService.timeoutMs,
+          gatewaySecret: config.licenseService.gatewaySecret,
+          gatewayRole: config.licenseService.gatewayRole,
+        }
+      : undefined,
+  });
 
   // Register tenant form detail routes (platform-level, separate to avoid route conflicts)
   await app.register(tenantFormDetailRoutes);

@@ -18,10 +18,8 @@ export interface IntegratedAuthConfig {
   keycloakJwksCacheTtl: number;
   licenseServiceBaseUrl: string;
   licenseServiceTimeoutMs: number;
-  licenseServiceCircuitBreaker: {
-    failureThreshold: number;
-    resetTimeoutMs: number;
-  };
+  licenseServiceGatewaySecret: string;
+  licenseServiceGatewayRole: string;
 }
 
 export interface CascadeLoginResult {
@@ -69,7 +67,8 @@ export class IntegratedAuthStrategy implements AuthStrategy {
     const licenseConfig: LicenseClientConfig = {
       baseUrl: config.licenseServiceBaseUrl,
       timeoutMs: config.licenseServiceTimeoutMs,
-      circuitBreaker: config.licenseServiceCircuitBreaker,
+      gatewaySecret: config.licenseServiceGatewaySecret,
+      gatewayRole: config.licenseServiceGatewayRole,
     };
     this.licenseClient = new LicenseClient(licenseConfig);
   }
@@ -157,47 +156,50 @@ export class IntegratedAuthStrategy implements AuthStrategy {
     // Extract claims from the access token
     const claims = this.keycloakClient.extractClaims(tokenResponse.access_token);
 
-    // Step 2: License Service check (soft-fail — log and continue if unavailable)
-    try {
-      await this.licenseClient.checkAccess(tenantSlug);
-    } catch (licenseError: any) {
-      // Only block login for explicit license denials (suspended/expired)
-      if (licenseError?.code === 'LICENSE_SUSPENDED' || licenseError?.code === 'LICENSE_EXPIRED') {
-        throw licenseError;
-      }
-      // For service unavailability or auth issues, log warning and continue
-      console.warn(`[IntegratedAuth] License check falló para '${tenantSlug}' (${licenseError?.code || licenseError?.message || 'unknown'}) — continuando login sin verificación de licencia`);
-    }
-
-    // Step 3: Local tenant DB lookup
-    const tenantResult = await db
-      .select({
-        slug: tenants.slug,
-        nombre: tenants.nombre,
-        plan: tenants.plan,
-        status: tenants.status,
-      })
-      .from(tenants)
-      .where(eq(tenants.slug, tenantSlug))
-      .limit(1);
-
-    const tenant = tenantResult[0];
-
-    if (!tenant) {
-      throw new AuthError(404, 'TENANT_NOT_FOUND', 'Organización no encontrada');
-    }
-
-    if (tenant.status !== 'active') {
-      throw new AuthError(403, 'TENANT_SUSPENDED', 'Organización suspendida');
-    }
-
-    // Verify user exists in this tenant's schema
-    // Skip for platform_admin users on the default tenant (they don't belong to any specific tenant)
+    // Determine role/platform_admin FIRST — a platform_admin does not belong to
+    // any tenant (tenant_slug = "platform"), so it must skip the tenant lookup
+    // and tenant-membership checks entirely.
     const primaryRole = claims.roles?.find((r: string) =>
       ['platform_admin', 'superusuario', 'admin', 'manager', 'tecnico', 'asistente'].includes(r)
     ) || 'tecnico';
 
     const isPlatformAdmin = claims.roles?.includes('platform_admin');
+
+    // Tenant lookup local (omitido para platform_admin, que es cross-tenant y no
+    // tiene fila en public.tenants).
+    let tenant: { slug: string; nombre: string; plan: string; licenseTenantId: string | null } | undefined;
+
+    if (!isPlatformAdmin) {
+      const tenantResult = await db
+        .select({
+          slug: tenants.slug,
+          nombre: tenants.nombre,
+          plan: tenants.plan,
+          licenseTenantId: tenants.licenseTenantId,
+        })
+        .from(tenants)
+        .where(eq(tenants.slug, tenantSlug))
+        .limit(1);
+
+      tenant = tenantResult[0];
+
+      if (!tenant) {
+        throw new AuthError(404, 'TENANT_NOT_FOUND', 'Organización no encontrada');
+      }
+
+      // Validación de acceso contra la FUENTE DE VERDAD (license-service).
+      // Se consulta el estado EFECTIVO del tenant (mismo criterio que la vista de
+      // planes: getEstadoEfectivo, que considera el pago mensual). NO se lee el
+      // espejo public.tenants.status de SMT porque puede quedar desactualizado.
+      // El mapeo SMT→license-service es public.tenants.license_tenant_id.
+      if (!tenant.licenseTenantId) {
+        // Sin mapeo a la fuente de verdad no se puede validar el estado → bloquear.
+        throw new AuthError(403, 'TENANT_NOT_MAPPED', 'Organización sin licencia asociada');
+      }
+      // checkAccess lanza AuthError 403 si está suspendido/expirado, o 503 si el
+      // license-service no responde (hard-fail: sin estado confirmado no se entra).
+      await this.licenseClient.checkAccess(tenant.licenseTenantId);
+    }
 
     if (!isPlatformAdmin) {
       // SECURITY (tenant isolation): the tenant the user belongs to comes from the
@@ -230,18 +232,21 @@ export class IntegratedAuthStrategy implements AuthStrategy {
 
     // Sync role to local DB (Keycloak is source of truth)
     // This keeps users.role updated as a local cache for operational queries.
-    try {
-      const schemaName = toSchemaName(tenantSlug);
-      const sql = getSqlClient();
-      await sql.unsafe(`SET search_path TO ${schemaName}, public`);
-      await sql`
-        UPDATE users SET role = ${primaryRole}, updated_at = NOW()
-        WHERE id = ${claims.sub} AND role != ${primaryRole}
-      `;
-      await sql.unsafe(`SET search_path TO public`);
-    } catch (syncError) {
-      // Non-blocking: role sync failure should not prevent login
-      console.warn(`[IntegratedAuth] Role sync failed for ${claims.sub}: ${syncError instanceof Error ? syncError.message : 'unknown'}`);
+    // Skipped for platform_admin (no tenant schema of its own).
+    if (!isPlatformAdmin) {
+      try {
+        const schemaName = toSchemaName(tenantSlug);
+        const sql = getSqlClient();
+        await sql.unsafe(`SET search_path TO ${schemaName}, public`);
+        await sql`
+          UPDATE users SET role = ${primaryRole}, updated_at = NOW()
+          WHERE id = ${claims.sub} AND role != ${primaryRole}
+        `;
+        await sql.unsafe(`SET search_path TO public`);
+      } catch (syncError) {
+        // Non-blocking: role sync failure should not prevent login
+        console.warn(`[IntegratedAuth] Role sync failed for ${claims.sub}: ${syncError instanceof Error ? syncError.message : 'unknown'}`);
+      }
     }
 
     return {
@@ -255,9 +260,9 @@ export class IntegratedAuthStrategy implements AuthStrategy {
         tenantSlug,
       },
       tenant: {
-        slug: tenant.slug,
-        nombre: tenant.nombre,
-        plan: tenant.plan,
+        slug: tenant?.slug ?? tenantSlug,
+        nombre: tenant?.nombre ?? 'Plataforma',
+        plan: tenant?.plan ?? 'platform',
       },
     };
   }

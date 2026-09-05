@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   backend-dev:
     # Node 22: requerido por pnpm@9.12.0 (packageManager en package.json).
@@ -9,18 +7,24 @@ services:
       - ../..:/workspace:cached
     command: sleep infinity
     networks:
+      # Red interna del devcontainer (postgres, redis, garage, clamav).
       - default
+      # Redes compartidas para alcanzar license-kafka, license-app (mikel-net)
+      # y keycloak (keycloak-external) en modo integrado.
+      - mikel-net
+      - keycloak-external
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
+      garage-init:
+        condition: service_completed_successfully
 
-  # Override service names to use Docker internal DNS
+  # Override service names to use Docker internal DNS.
+  # Los servicios y sus imágenes se heredan de ../../docker-compose.yml;
+  # aquí solo se ajusta la red del devcontainer.
   postgres:
-    # Inherited from docker-compose.yml
     networks:
       - default
 
@@ -28,7 +32,11 @@ services:
     networks:
       - default
 
-  minio:
+  garage:
+    networks:
+      - default
+
+  garage-init:
     networks:
       - default
 
@@ -39,3 +47,11 @@ services:
 networks:
   default:
     name: sgr-dev-network
+  # Redes compartidas creadas por los stacks de license-service y Keycloak.
+  # Externas: el devcontainer las usa para el modo integrado (Kafka, Keycloak).
+  mikel-net:
+    name: mikel-net
+    external: true
+  keycloak-external:
+    name: keycloak-external
+    external: true

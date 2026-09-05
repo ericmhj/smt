@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import type { Database } from '../../db/index.js';
 import { clienteDocumentos, clientes } from '../../db/schema/clientes.js';
-import { uploadFile, getFileUrl, deleteFile } from '../../lib/minio.js';
+import { uploadFile, getFileUrl, deleteFile } from '../../lib/garage.js';
 import { sanitizeFilename } from '../../lib/tenant-schema.js';
 import { DocumentoError, DocumentoErrorCode } from './documento.errors.js';
 import { ClienteError, ClienteErrorCode } from './cliente.errors.js';
