@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import FormList from '@/components/forms/FormList';
@@ -64,14 +63,9 @@ export default function FormsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Formularios</h1>
-        {user && (user.role === 'superusuario' || user.role === 'admin') && (
-          <Link
-            href="/forms/new"
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Nuevo formulario
-          </Link>
-        )}
+        {/* El flujo de creación de formularios está deshabilitado para todos
+            los roles (incluido superusuario). No se expone ningún rastro del
+            alta de formularios en esta vista. */}
       </div>
 
       {loading ? (
