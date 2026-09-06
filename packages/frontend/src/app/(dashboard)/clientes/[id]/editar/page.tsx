@@ -67,7 +67,15 @@ export default function EditarClientePage() {
     const errs: FormErrors = {};
     if (!form.nombre.trim()) errs.nombre = 'El nombre es obligatorio';
     if (!form.rfc.trim()) errs.rfc = 'El RFC es obligatorio';
-    if (!form.telefono.trim()) errs.telefono = 'El teléfono es obligatorio';
+    if (!form.telefono.trim()) {
+      errs.telefono = 'El teléfono es obligatorio';
+    } else {
+      // Solo se cuentan los dígitos (el input ya bloquea letras). Teléfono
+      // nacional MX = 10 dígitos; se permiten hasta 15 para incluir lada país.
+      const digitos = form.telefono.replace(/\D/g, '');
+      if (digitos.length < 10) errs.telefono = 'El teléfono debe tener al menos 10 dígitos';
+      else if (digitos.length > 15) errs.telefono = 'El teléfono no debe exceder 15 dígitos';
+    }
     if (!form.direccionCentroTrabajo.trim()) errs.direccionCentroTrabajo = 'El domicilio es obligatorio';
     if (!form.actividadPrincipal.trim()) errs.actividadPrincipal = 'La actividad principal es obligatoria';
     if (!form.contacto.trim()) errs.contacto = 'El contacto es obligatorio';
@@ -141,7 +149,19 @@ export default function EditarClientePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono *</label>
-            <input type="text" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+            <input
+              type="tel"
+              inputMode="numeric"
+              value={form.telefono}
+              onChange={(e) => {
+                // Solo números y separadores telefónicos comunes: + - ( ) y espacios.
+                const soloTelefono = e.target.value.replace(/[^\d+\-()\s]/g, '');
+                setForm({ ...form, telefono: soloTelefono });
+              }}
+              maxLength={20}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              placeholder="+52 XX XXXX XXXX"
+            />
             {errors.telefono && <p className="text-red-600 text-xs mt-1">{errors.telefono}</p>}
           </div>
           <div>
